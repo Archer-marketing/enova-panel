@@ -9,20 +9,32 @@ para el contexto y las decisiones de diseño.
 
 ## Estado de este entregable
 
-Todo el código (app Next.js, schema SQL, script de setup de Kommo, workflows
-de n8n) está escrito y listo para conectar. **No se pudo instalar
-dependencias, compilar ni inicializar git en esta máquina** — no tiene
-`git`, `node` ni `npm` instalados. Antes de desplegar:
+Git, Node.js y npm se instalaron en esta máquina (vía `winget`), el repo ya
+tiene su primer commit, `npm install` corrió sin vulnerabilidades
+(`npm audit` → 0), y `npm run build` compila limpio con Next.js 16.2.12
+(TypeScript sin errores, las 7 rutas generadas correctamente). También se
+levantó `npm run start` localmente y se confirmó:
 
-1. Instala Node.js 20+ y ejecuta `npm install` en la raíz del proyecto para
-   confirmar que compila (`npm run build`).
-2. Inicializa el repo (`git init`, primer commit) y súbelo a GitHub/GitLab —
-   EasyPanel construye la app "App" desde un repo con auto-build.
-3. Los workflows de n8n (`n8n/*.json`) están escritos a mano contra el
-   patrón estándar de nodos Postgres/Code de n8n; impórtalos y revisa que el
-   nodo Postgres coincida con la versión de tu instancia (si difiere,
-   reconstruye ese nodo con el SQL que ya está en el JSON — esa es la parte
-   que importa, no la forma exacta del nodo).
+- `/asesores` y `/campanas` responden 200 y renderizan.
+- Las rutas `/api/reports/*` fallan con 500 controlado (`Missing
+  DATABASE_URL`) porque aún no hay un Postgres real — es el comportamiento
+  esperado sin credenciales; el frontend ya lo muestra como mensaje de error
+  en vez de quedarse cargando indefinidamente.
+
+Lo que falta para que funcione de punta a punta es exclusivamente conectar
+servicios externos reales (no se puede simular sin tus credenciales):
+
+1. Un Postgres real (EasyPanel) con `db/schema.sql` aplicado.
+2. Acceso a tu cuenta de Kommo para correr `scripts/setup-kommo.ts`.
+3. Tu instancia de n8n para importar y activar los workflows.
+4. Subir este repo a GitHub/GitLab para que EasyPanel construya la app
+   "App" desde él.
+
+Los workflows de n8n (`n8n/*.json`) están escritos a mano contra el patrón
+estándar de nodos Postgres/Code de n8n (no se pudieron importar contra una
+instancia real desde aquí); revisa que el nodo Postgres coincida con la
+versión de tu instancia al importarlos — si difiere, reconstruye ese nodo
+con el SQL que ya está en el JSON, que es la parte que importa.
 
 ## Prerrequisitos (credenciales que debes proveer)
 
