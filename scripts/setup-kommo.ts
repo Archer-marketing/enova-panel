@@ -137,13 +137,12 @@ async function registerWonLostWebhook(destination: string) {
   console.log(`Registered webhook -> ${destination}`);
 }
 
-// Kommo's two "special" status ids (142 = won, 143 = lost) are consistent
-// across every pipeline in an account. Some accounts also expose a numeric
-// `type` on the status object (1 = success, 2 = failure) — prefer that when
-// present, fall back to the fixed ids otherwise.
-function classifyStatus(status: { id: number; type?: number }): "open" | "won" | "lost" {
-  if (status.type === 1) return "won";
-  if (status.type === 2) return "lost";
+// Kommo's two "special" status ids (142 = won, 143 = lost) are fixed and
+// consistent across every pipeline in an account. The status object's
+// numeric `type` field is NOT a won/lost indicator in practice — Kommo sets
+// type=1 on each pipeline's first/incoming status (e.g. "Leads Entrantes"),
+// not on 142/143 — so classification must rely on id alone.
+function classifyStatus(status: { id: number }): "open" | "won" | "lost" {
   if (status.id === 142) return "won";
   if (status.id === 143) return "lost";
   return "open";
