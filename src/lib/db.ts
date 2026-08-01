@@ -17,8 +17,14 @@ function createPool() {
   });
 }
 
-// Reuse the pool across hot reloads / route invocations in the same process.
-export const pool = global.__pgPool ?? createPool();
-if (process.env.NODE_ENV !== "production") {
-  global.__pgPool = pool;
+// Lazy singleton — constructing a Pool at module-import time makes
+// `DATABASE_URL` a hard requirement just to load this file, which breaks
+// Next.js's build-time page-data collection (routes get imported without
+// runtime env vars set). Deferring construction to first query means the
+// build only needs DATABASE_URL once a request actually runs.
+export function getPool(): Pool {
+  if (!global.__pgPool) {
+    global.__pgPool = createPool();
+  }
+  return global.__pgPool;
 }

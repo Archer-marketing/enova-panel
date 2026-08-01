@@ -33,6 +33,7 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
   const [selectedValues, setSelectedValues] = useState<string[]>([]);
   const [report, setReport] = useState<FunnelReport | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/reports/filters")
@@ -59,9 +60,14 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
       url = `/api/reports/campanas?${params.toString()}`;
     }
     setLoading(true);
+    setError(null);
     fetch(url)
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        return r.json();
+      })
       .then(setReport)
+      .catch((e) => setError(e.message ?? "Error al cargar el reporte"))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, from, to, selectedAsesores, dimension, campaignFilter, adsetFilter, selectedValues]);
@@ -160,7 +166,9 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
         )}
       </div>
 
-      {loading || !totals ? (
+      {error ? (
+        <div className="empty">No se pudo cargar el reporte: {error}</div>
+      ) : loading || !totals ? (
         <div className="loading">Cargando…</div>
       ) : (
         <>

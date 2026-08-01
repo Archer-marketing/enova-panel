@@ -1,4 +1,4 @@
-import { pool } from "./db";
+import { getPool } from "./db";
 import type { Dimension, FunnelRow, FunnelReport, LossReasonSlice, PipelineSlice, ReportFilters } from "./types";
 
 // Fixed, whitelisted SQL fragments per dimension — never built from raw user
@@ -138,9 +138,9 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
   `;
 
   const [mainRes, pipelineRes, lossRes] = await Promise.all([
-    pool.query(mainSql, dateParams),
-    pool.query(pipelineSql, dateParams),
-    pool.query(lossSql, dateParams),
+    getPool().query(mainSql, dateParams),
+    getPool().query(pipelineSql, dateParams),
+    getPool().query(lossSql, dateParams),
   ]);
 
   const rowsByKey = new Map<string, FunnelRow>();
@@ -240,13 +240,13 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
 }
 
 export async function listAsesores(): Promise<{ id: string; name: string }[]> {
-  const res = await pool.query(
+  const res = await getPool().query(
     `SELECT responsible_user_id, responsible_user_name FROM kommo_asesores ORDER BY responsible_user_name`
   );
   return res.rows.map((r) => ({ id: String(r.responsible_user_id), name: r.responsible_user_name ?? "Sin asignar" }));
 }
 
 export async function listCampanas(): Promise<{ campaign: string | null; adset: string | null; ad: string | null }[]> {
-  const res = await pool.query(`SELECT campaign, adset, ad FROM kommo_campanas ORDER BY campaign, adset, ad`);
+  const res = await getPool().query(`SELECT campaign, adset, ad FROM kommo_campanas ORDER BY campaign, adset, ad`);
   return res.rows;
 }
