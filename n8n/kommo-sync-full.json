@@ -181,7 +181,7 @@
         "operation": "executeQuery",
         "query": "INSERT INTO kommo_statuses (pipeline_id, status_id, pipeline_name, status_name, sort, status_type) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (pipeline_id, status_id) DO UPDATE SET pipeline_name=excluded.pipeline_name, status_name=excluded.status_name, sort=excluded.sort, status_type=excluded.status_type;",
         "options": {
-          "queryReplacement": "={{ $json.pipeline_id }},{{ $json.status_id }},{{ $json.pipeline_name }},{{ $json.status_name }},{{ $json.sort }},{{ $json.status_type }}"
+          "queryReplacement": "={{ [$json.pipeline_id, $json.status_id, $json.pipeline_name, $json.status_name, $json.sort, $json.status_type] }}"
         }
       },
       "credentials": { "postgres": { "id": "VfzvqXcIPcMEj12e", "name": "Postgres - panel (reportes-db)" } }
@@ -196,7 +196,7 @@
         "operation": "executeQuery",
         "query": "INSERT INTO kommo_loss_reasons (loss_reason_id, name) VALUES ($1,$2) ON CONFLICT (loss_reason_id) DO UPDATE SET name=excluded.name;",
         "options": {
-          "queryReplacement": "={{ $json.loss_reason_id }},{{ $json.name }}"
+          "queryReplacement": "={{ [$json.loss_reason_id, $json.name] }}"
         }
       },
       "credentials": { "postgres": { "id": "VfzvqXcIPcMEj12e", "name": "Postgres - panel (reportes-db)" } }
@@ -211,7 +211,7 @@
         "operation": "executeQuery",
         "query": "INSERT INTO kommo_leads (lead_id, name, price, pipeline_id, status_id, responsible_user_id, responsible_user_name, created_at, updated_at, closed_at, is_won, is_lost, loss_reason_id, loss_reason_name, campaign, adset, ad, fecha_agenda, fecha_cita_asistida, fecha_cotizacion, synced_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20, now()) ON CONFLICT (lead_id) DO UPDATE SET name=excluded.name, price=excluded.price, pipeline_id=excluded.pipeline_id, status_id=excluded.status_id, responsible_user_id=excluded.responsible_user_id, responsible_user_name=excluded.responsible_user_name, created_at=excluded.created_at, updated_at=excluded.updated_at, closed_at=excluded.closed_at, is_won=excluded.is_won, is_lost=excluded.is_lost, loss_reason_id=excluded.loss_reason_id, loss_reason_name=excluded.loss_reason_name, campaign=excluded.campaign, adset=excluded.adset, ad=excluded.ad, fecha_agenda=excluded.fecha_agenda, fecha_cita_asistida=excluded.fecha_cita_asistida, fecha_cotizacion=excluded.fecha_cotizacion, synced_at=now();",
         "options": {
-          "queryReplacement": "={{ $json.lead_id }},{{ $json.name }},{{ $json.price }},{{ $json.pipeline_id }},{{ $json.status_id }},{{ $json.responsible_user_id }},{{ $json.responsible_user_name }},{{ $json.created_at }},{{ $json.updated_at }},{{ $json.closed_at }},{{ $json.is_won }},{{ $json.is_lost }},{{ $json.loss_reason_id }},{{ $json.loss_reason_name }},{{ $json.campaign }},{{ $json.adset }},{{ $json.ad }},{{ $json.fecha_agenda }},{{ $json.fecha_cita_asistida }},{{ $json.fecha_cotizacion }}"
+          "queryReplacement": "={{ [$json.lead_id, $json.name, $json.price, $json.pipeline_id, $json.status_id, $json.responsible_user_id, $json.responsible_user_name, $json.created_at, $json.updated_at, $json.closed_at, $json.is_won, $json.is_lost, $json.loss_reason_id, $json.loss_reason_name, $json.campaign, $json.adset, $json.ad, $json.fecha_agenda, $json.fecha_cita_asistida, $json.fecha_cotizacion] }}"
         }
       },
       "credentials": { "postgres": { "id": "VfzvqXcIPcMEj12e", "name": "Postgres - panel (reportes-db)" } }
