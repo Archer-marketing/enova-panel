@@ -39,7 +39,7 @@
         "sendQuery": true,
         "queryParameters": { "parameters": [{ "name": "limit", "value": "250" }] }
       },
-      "credentials": { "httpHeaderAuth": { "id": "REPLACE_ME", "name": "Kommo API" } }
+      "credentials": { "httpHeaderAuth": { "id": "XsRjtzeSEqxUJAEA", "name": "Kommo API" } }
     },
     {
       "id": "getPipelines",
@@ -55,7 +55,7 @@
         "sendQuery": true,
         "queryParameters": { "parameters": [{ "name": "with", "value": "statuses" }] }
       },
-      "credentials": { "httpHeaderAuth": { "id": "REPLACE_ME", "name": "Kommo API" } }
+      "credentials": { "httpHeaderAuth": { "id": "XsRjtzeSEqxUJAEA", "name": "Kommo API" } }
     },
     {
       "id": "getLossReasons",
@@ -71,7 +71,7 @@
         "sendQuery": true,
         "queryParameters": { "parameters": [{ "name": "limit", "value": "250" }] }
       },
-      "credentials": { "httpHeaderAuth": { "id": "REPLACE_ME", "name": "Kommo API" } }
+      "credentials": { "httpHeaderAuth": { "id": "XsRjtzeSEqxUJAEA", "name": "Kommo API" } }
     },
     {
       "id": "getLeads",
@@ -107,7 +107,7 @@
           }
         }
       },
-      "credentials": { "httpHeaderAuth": { "id": "REPLACE_ME", "name": "Kommo API" } }
+      "credentials": { "httpHeaderAuth": { "id": "XsRjtzeSEqxUJAEA", "name": "Kommo API" } }
     },
     {
       "id": "flattenStatuses",
