@@ -99,12 +99,8 @@
           "response": { "response": { "responseFormat": "json" } },
           "pagination": {
             "pagination": {
-              "paginationMode": "updateAParameterInEachRequest",
-              "parameters": {
-                "parameters": [{ "type": "qs", "name": "page", "value": "={{ $pageCount + 1 }}" }]
-              },
-              "paginationCompleteWhen": "other",
-              "completeExpression": "={{ !$response.body?._embedded?.leads?.length }}",
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ $response.body._links.next ? $response.body._links.next.href : undefined }}",
               "limitPagesFetched": true,
               "maxRequests": 2000,
               "requestInterval": 350
