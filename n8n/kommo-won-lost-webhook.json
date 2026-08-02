@@ -40,7 +40,7 @@
         "sendQuery": true,
         "queryParameters": { "parameters": [{ "name": "with", "value": "statuses" }] }
       },
-      "credentials": { "httpHeaderAuth": { "id": "XsRjtzeSEqxUJAEA", "name": "Kommo API" } }
+      "credentials": { "httpHeaderAuth": { "id": "SzwL0AS7rZs6OaFj", "name": "Kommo API" } }
     },
     {
       "id": "getLossReasons",
@@ -56,7 +56,7 @@
         "sendQuery": true,
         "queryParameters": { "parameters": [{ "name": "limit", "value": "250" }] }
       },
-      "credentials": { "httpHeaderAuth": { "id": "XsRjtzeSEqxUJAEA", "name": "Kommo API" } }
+      "credentials": { "httpHeaderAuth": { "id": "SzwL0AS7rZs6OaFj", "name": "Kommo API" } }
     },
     {
       "id": "getLead",
@@ -72,7 +72,7 @@
         "sendQuery": true,
         "queryParameters": { "parameters": [{ "name": "with", "value": "custom_fields_values" }] }
       },
-      "credentials": { "httpHeaderAuth": { "id": "XsRjtzeSEqxUJAEA", "name": "Kommo API" } }
+      "credentials": { "httpHeaderAuth": { "id": "SzwL0AS7rZs6OaFj", "name": "Kommo API" } }
     },
     {
       "id": "classify",
