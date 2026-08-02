@@ -105,7 +105,8 @@
               },
               "paginationCompleteWhen": "other",
               "completeExpression": "={{ !$response.body?._embedded?.leads?.length }}",
-              "limitPagesFetched": false,
+              "limitPagesFetched": true,
+              "maxRequests": 2000,
               "requestInterval": 350
             }
           }
