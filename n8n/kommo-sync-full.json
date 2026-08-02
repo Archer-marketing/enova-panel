@@ -37,7 +37,8 @@
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendQuery": true,
-        "queryParameters": { "parameters": [{ "name": "limit", "value": "250" }] }
+        "queryParameters": { "parameters": [{ "name": "limit", "value": "250" }] },
+        "options": { "response": { "response": { "responseFormat": "json" } } }
       },
       "credentials": { "httpHeaderAuth": { "id": "SzwL0AS7rZs6OaFj", "name": "Kommo API" } }
     },
@@ -53,7 +54,8 @@
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendQuery": true,
-        "queryParameters": { "parameters": [{ "name": "with", "value": "statuses" }] }
+        "queryParameters": { "parameters": [{ "name": "with", "value": "statuses" }] },
+        "options": { "response": { "response": { "responseFormat": "json" } } }
       },
       "credentials": { "httpHeaderAuth": { "id": "SzwL0AS7rZs6OaFj", "name": "Kommo API" } }
     },
@@ -69,7 +71,8 @@
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendQuery": true,
-        "queryParameters": { "parameters": [{ "name": "limit", "value": "250" }] }
+        "queryParameters": { "parameters": [{ "name": "limit", "value": "250" }] },
+        "options": { "response": { "response": { "responseFormat": "json" } } }
       },
       "credentials": { "httpHeaderAuth": { "id": "SzwL0AS7rZs6OaFj", "name": "Kommo API" } }
     },
@@ -93,6 +96,7 @@
           ]
         },
         "options": {
+          "response": { "response": { "responseFormat": "json" } },
           "pagination": {
             "pagination": {
               "paginationMode": "updateAParameterInEachRequest",
