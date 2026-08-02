@@ -77,12 +77,12 @@
       "credentials": { "httpHeaderAuth": { "id": "SzwL0AS7rZs6OaFj", "name": "Kommo API" } }
     },
     {
-      "id": "getLeads",
-      "name": "Get Leads (paginated)",
+      "id": "fetchLeadsPage",
+      "name": "Fetch Leads Page",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [260, 390],
-      "notes": "Attach the Kommo Header Auth credential after import. Pagination throttled to ~3 req/s (350ms between pages), well under Kommo's 7 req/s cap.",
+      "notes": "Attach the Kommo Header Auth credential after import. Single page per call — looped manually below (n8n's built-in HTTP Request pagination crashes on this account's leads volume). page comes from input ($json.page), defaults to 1 on the very first call from a trigger.",
       "parameters": {
         "url": "https://infoenovapanelessolarescom.kommo.com/api/v4/leads",
         "authentication": "genericCredentialType",
@@ -92,23 +92,53 @@
           "parameters": [
             { "name": "with", "value": "custom_fields_values" },
             { "name": "limit", "value": "250" },
-            { "name": "page", "value": "1" }
+            { "name": "page", "value": "={{ $json.page || 1 }}" }
           ]
         },
-        "options": {
-          "response": { "response": { "responseFormat": "json" } },
-          "pagination": {
-            "pagination": {
-              "paginationMode": "responseContainsNextURL",
-              "nextURL": "={{ $response.body._links.next ? $response.body._links.next.href : undefined }}",
-              "limitPagesFetched": true,
-              "maxRequests": 2000,
-              "requestInterval": 350
-            }
-          }
-        }
+        "options": { "response": { "response": { "responseFormat": "json" } } }
       },
       "credentials": { "httpHeaderAuth": { "id": "SzwL0AS7rZs6OaFj", "name": "Kommo API" } }
+    },
+    {
+      "id": "waitBetweenPages",
+      "name": "Wait 350ms",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [480, 390],
+      "notes": "Paces page fetches at ~3 req/s, well under Kommo's 7 req/s cap.",
+      "parameters": { "amount": 0.35, "unit": "seconds" }
+    },
+    {
+      "id": "collectAndRoute",
+      "name": "Collect & route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 390],
+      "notes": "Accumulates leads across loop iterations in workflow static data (persists across repeated visits to this node within one execution). Loops back to 'Fetch Leads Page' while _links.next exists, otherwise passes the full accumulated list on to 'Transform leads'.",
+      "parameters": {
+        "jsCode": "const staticData = this.getWorkflowStaticData('node');\nif (staticData.leads === undefined) {\n  staticData.leads = [];\n}\n\nconst response = $input.first().json;\nconst newLeads = response._embedded?.leads ?? [];\nstaticData.leads.push(...newLeads);\n\nconst hasNext = !!response._links?.next?.href;\nconst currentPage = response._page ?? 1;\n\nif (hasNext) {\n  return [{ json: { route: 'loop', page: currentPage + 1 } }];\n}\n\nconst allLeads = staticData.leads;\ndelete staticData.leads;\nreturn [{ json: { route: 'done', leads: allLeads } }];\n"
+      }
+    },
+    {
+      "id": "morePages",
+      "name": "More pages?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [920, 390],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "loop",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
     },
     {
       "id": "flattenStatuses",
@@ -135,10 +165,10 @@
       "name": "Transform leads",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [520, 390],
+      "position": [1140, 390],
       "notes": "Field IDs below are specific to this Kommo account (from scripts/setup-kommo.ts output): agenda=Próxima cita, cita_asistida + cotizacion created by the script, campaign/adset/ad reused from existing fields.",
       "parameters": {
-        "jsCode": "const fieldMap = {\n  agenda: 3010723,\n  cita_asistida: 3028076,\n  cotizacion: 3028078,\n  campaign: 2972918,\n  adset: 2972920,\n  ad: 2972924,\n};\n\nconst users = $('Get Users').first().json._embedded?.users ?? [];\nconst userNameById = new Map(users.map((u) => [u.id, u.name]));\n\nconst pipelines = $('Get Pipelines').first().json._embedded?.pipelines ?? [];\nconst statusType = new Map();\nfor (const p of pipelines) {\n  for (const s of p._embedded?.statuses ?? []) {\n    let type = 'open';\n    if (s.id === 142) type = 'won';\n    if (s.id === 143) type = 'lost';\n    statusType.set(s.id, type);\n  }\n}\n\nconst lossReasons = $('Get Loss Reasons').first().json._embedded?.loss_reasons ?? [];\nconst lossReasonById = new Map(lossReasons.map((r) => [r.id, r.name]));\n\nconst toIso = (unixSeconds) => (unixSeconds ? new Date(unixSeconds * 1000).toISOString() : null);\nfunction extractCustomField(lead, fieldId) {\n  const cf = (lead.custom_fields_values || []).find((f) => f.field_id === fieldId);\n  return cf?.values?.[0]?.value ?? null;\n}\nfunction extractCustomFieldDate(lead, fieldId) {\n  const raw = extractCustomField(lead, fieldId);\n  const n = Number(raw);\n  return raw != null && Number.isFinite(n) ? toIso(n) : null;\n}\n\nconst allLeads = $input.all().flatMap((item) => item.json._embedded?.leads ?? []);\n\nreturn allLeads.map((lead) => {\n  const type = statusType.get(lead.status_id) ?? 'open';\n  return {\n    json: {\n      lead_id: lead.id,\n      name: lead.name,\n      price: lead.price ?? 0,\n      pipeline_id: lead.pipeline_id,\n      status_id: lead.status_id,\n      responsible_user_id: lead.responsible_user_id,\n      responsible_user_name: userNameById.get(lead.responsible_user_id) ?? null,\n      created_at: toIso(lead.created_at),\n      updated_at: toIso(lead.updated_at),\n      closed_at: toIso(lead.closed_at),\n      is_won: type === 'won',\n      is_lost: type === 'lost',\n      loss_reason_id: lead.loss_reason_id ?? null,\n      loss_reason_name: lead.loss_reason_id ? (lossReasonById.get(lead.loss_reason_id) ?? null) : null,\n      campaign: extractCustomField(lead, fieldMap.campaign),\n      adset: extractCustomField(lead, fieldMap.adset),\n      ad: extractCustomField(lead, fieldMap.ad),\n      fecha_agenda: extractCustomFieldDate(lead, fieldMap.agenda),\n      fecha_cita_asistida: extractCustomFieldDate(lead, fieldMap.cita_asistida),\n      fecha_cotizacion: extractCustomFieldDate(lead, fieldMap.cotizacion),\n    },\n  };\n});\n"
+        "jsCode": "const fieldMap = {\n  agenda: 3010723,\n  cita_asistida: 3028076,\n  cotizacion: 3028078,\n  campaign: 2972918,\n  adset: 2972920,\n  ad: 2972924,\n};\n\nconst users = $('Get Users').first().json._embedded?.users ?? [];\nconst userNameById = new Map(users.map((u) => [u.id, u.name]));\n\nconst pipelines = $('Get Pipelines').first().json._embedded?.pipelines ?? [];\nconst statusType = new Map();\nfor (const p of pipelines) {\n  for (const s of p._embedded?.statuses ?? []) {\n    let type = 'open';\n    if (s.id === 142) type = 'won';\n    if (s.id === 143) type = 'lost';\n    statusType.set(s.id, type);\n  }\n}\n\nconst lossReasons = $('Get Loss Reasons').first().json._embedded?.loss_reasons ?? [];\nconst lossReasonById = new Map(lossReasons.map((r) => [r.id, r.name]));\n\nconst toIso = (unixSeconds) => (unixSeconds ? new Date(unixSeconds * 1000).toISOString() : null);\nfunction extractCustomField(lead, fieldId) {\n  const cf = (lead.custom_fields_values || []).find((f) => f.field_id === fieldId);\n  return cf?.values?.[0]?.value ?? null;\n}\nfunction extractCustomFieldDate(lead, fieldId) {\n  const raw = extractCustomField(lead, fieldId);\n  const n = Number(raw);\n  return raw != null && Number.isFinite(n) ? toIso(n) : null;\n}\n\nconst allLeads = $input.first().json.leads ?? [];\n\nreturn allLeads.map((lead) => {\n  const type = statusType.get(lead.status_id) ?? 'open';\n  return {\n    json: {\n      lead_id: lead.id,\n      name: lead.name,\n      price: lead.price ?? 0,\n      pipeline_id: lead.pipeline_id,\n      status_id: lead.status_id,\n      responsible_user_id: lead.responsible_user_id,\n      responsible_user_name: userNameById.get(lead.responsible_user_id) ?? null,\n      created_at: toIso(lead.created_at),\n      updated_at: toIso(lead.updated_at),\n      closed_at: toIso(lead.closed_at),\n      is_won: type === 'won',\n      is_lost: type === 'lost',\n      loss_reason_id: lead.loss_reason_id ?? null,\n      loss_reason_name: lead.loss_reason_id ? (lossReasonById.get(lead.loss_reason_id) ?? null) : null,\n      campaign: extractCustomField(lead, fieldMap.campaign),\n      adset: extractCustomField(lead, fieldMap.adset),\n      ad: extractCustomField(lead, fieldMap.ad),\n      fecha_agenda: extractCustomFieldDate(lead, fieldMap.agenda),\n      fecha_cita_asistida: extractCustomFieldDate(lead, fieldMap.cita_asistida),\n      fecha_cotizacion: extractCustomFieldDate(lead, fieldMap.cotizacion),\n    },\n  };\n});\n"
       }
     },
     {
@@ -176,7 +206,7 @@
       "name": "Upsert kommo_leads",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [780, 390],
+      "position": [1360, 390],
       "parameters": {
         "operation": "executeQuery",
         "query": "INSERT INTO kommo_leads (lead_id, name, price, pipeline_id, status_id, responsible_user_id, responsible_user_name, created_at, updated_at, closed_at, is_won, is_lost, loss_reason_id, loss_reason_name, campaign, adset, ad, fecha_agenda, fecha_cita_asistida, fecha_cotizacion, synced_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20, now()) ON CONFLICT (lead_id) DO UPDATE SET name=excluded.name, price=excluded.price, pipeline_id=excluded.pipeline_id, status_id=excluded.status_id, responsible_user_id=excluded.responsible_user_id, responsible_user_name=excluded.responsible_user_name, created_at=excluded.created_at, updated_at=excluded.updated_at, closed_at=excluded.closed_at, is_won=excluded.is_won, is_lost=excluded.is_lost, loss_reason_id=excluded.loss_reason_id, loss_reason_name=excluded.loss_reason_name, campaign=excluded.campaign, adset=excluded.adset, ad=excluded.ad, fecha_agenda=excluded.fecha_agenda, fecha_cita_asistida=excluded.fecha_cita_asistida, fecha_cotizacion=excluded.fecha_cotizacion, synced_at=now();",
@@ -193,7 +223,7 @@
         { "node": "Get Users", "type": "main", "index": 0 },
         { "node": "Get Pipelines", "type": "main", "index": 0 },
         { "node": "Get Loss Reasons", "type": "main", "index": 0 },
-        { "node": "Get Leads (paginated)", "type": "main", "index": 0 }
+        { "node": "Fetch Leads Page", "type": "main", "index": 0 }
       ]]
     },
     "Manual run (backfill)": {
@@ -201,12 +231,20 @@
         { "node": "Get Users", "type": "main", "index": 0 },
         { "node": "Get Pipelines", "type": "main", "index": 0 },
         { "node": "Get Loss Reasons", "type": "main", "index": 0 },
-        { "node": "Get Leads (paginated)", "type": "main", "index": 0 }
+        { "node": "Fetch Leads Page", "type": "main", "index": 0 }
       ]]
     },
     "Get Pipelines": { "main": [[{ "node": "Flatten statuses", "type": "main", "index": 0 }]] },
     "Get Loss Reasons": { "main": [[{ "node": "Flatten loss reasons", "type": "main", "index": 0 }]] },
-    "Get Leads (paginated)": { "main": [[{ "node": "Transform leads", "type": "main", "index": 0 }]] },
+    "Fetch Leads Page": { "main": [[{ "node": "Wait 350ms", "type": "main", "index": 0 }]] },
+    "Wait 350ms": { "main": [[{ "node": "Collect & route", "type": "main", "index": 0 }]] },
+    "Collect & route": { "main": [[{ "node": "More pages?", "type": "main", "index": 0 }]] },
+    "More pages?": {
+      "main": [
+        [{ "node": "Fetch Leads Page", "type": "main", "index": 0 }],
+        [{ "node": "Transform leads", "type": "main", "index": 0 }]
+      ]
+    },
     "Flatten statuses": { "main": [[{ "node": "Upsert kommo_statuses", "type": "main", "index": 0 }]] },
     "Flatten loss reasons": { "main": [[{ "node": "Upsert kommo_loss_reasons", "type": "main", "index": 0 }]] },
     "Transform leads": { "main": [[{ "node": "Upsert kommo_leads", "type": "main", "index": 0 }]] }
