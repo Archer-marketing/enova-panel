@@ -82,7 +82,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [260, 390],
-      "notes": "Attach the Kommo Header Auth credential after import. Single page per call — looped manually below (n8n's built-in HTTP Request pagination crashes on this account's leads volume). page comes from input ($json.page), defaults to 1 on the very first call from a trigger.",
+      "notes": "Attach the Kommo Header Auth credential after import. Single page per call — looped manually below (n8n's built-in HTTP Request pagination crashed on this account's leads volume, and Code nodes here don't support static-data accumulation). page comes from input ($json.page), defaults to 1 on the very first call from a trigger. Each page's leads are transformed + upserted immediately (no in-memory accumulation across ~16 pages / ~4000 leads).",
       "parameters": {
         "url": "https://infoenovapanelessolarescom.kommo.com/api/v4/leads",
         "authentication": "genericCredentialType",
@@ -109,14 +109,25 @@
       "parameters": { "amount": 0.35, "unit": "seconds" }
     },
     {
-      "id": "collectAndRoute",
-      "name": "Collect & route",
+      "id": "transformPage",
+      "name": "Transform page",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [700, 390],
-      "notes": "Accumulates leads across loop iterations in workflow static data (persists across repeated visits to this node within one execution). Loops back to 'Fetch Leads Page' while _links.next exists, otherwise passes the full accumulated list on to 'Transform leads'.",
+      "position": [700, 280],
+      "notes": "Field IDs below are specific to this Kommo account (from scripts/setup-kommo.ts output): agenda=Próxima cita, cita_asistida + cotizacion created by the script, campaign/adset/ad reused from existing fields. Runs once per page.",
       "parameters": {
-        "jsCode": "const staticData = this.getWorkflowStaticData('node');\nif (staticData.leads === undefined) {\n  staticData.leads = [];\n}\n\nconst response = $input.first().json;\nconst newLeads = response._embedded?.leads ?? [];\nstaticData.leads.push(...newLeads);\n\nconst hasNext = !!response._links?.next?.href;\nconst currentPage = response._page ?? 1;\n\nif (hasNext) {\n  return [{ json: { route: 'loop', page: currentPage + 1 } }];\n}\n\nconst allLeads = staticData.leads;\ndelete staticData.leads;\nreturn [{ json: { route: 'done', leads: allLeads } }];\n"
+        "jsCode": "const fieldMap = {\n  agenda: 3010723,\n  cita_asistida: 3028076,\n  cotizacion: 3028078,\n  campaign: 2972918,\n  adset: 2972920,\n  ad: 2972924,\n};\n\nconst users = $('Get Users').first().json._embedded?.users ?? [];\nconst userNameById = new Map(users.map((u) => [u.id, u.name]));\n\nconst pipelines = $('Get Pipelines').first().json._embedded?.pipelines ?? [];\nconst statusType = new Map();\nfor (const p of pipelines) {\n  for (const s of p._embedded?.statuses ?? []) {\n    let type = 'open';\n    if (s.id === 142) type = 'won';\n    if (s.id === 143) type = 'lost';\n    statusType.set(s.id, type);\n  }\n}\n\nconst lossReasons = $('Get Loss Reasons').first().json._embedded?.loss_reasons ?? [];\nconst lossReasonById = new Map(lossReasons.map((r) => [r.id, r.name]));\n\nconst toIso = (unixSeconds) => (unixSeconds ? new Date(unixSeconds * 1000).toISOString() : null);\nfunction extractCustomField(lead, fieldId) {\n  const cf = (lead.custom_fields_values || []).find((f) => f.field_id === fieldId);\n  return cf?.values?.[0]?.value ?? null;\n}\nfunction extractCustomFieldDate(lead, fieldId) {\n  const raw = extractCustomField(lead, fieldId);\n  const n = Number(raw);\n  return raw != null && Number.isFinite(n) ? toIso(n) : null;\n}\n\nconst leads = $input.first().json._embedded?.leads ?? [];\n\nreturn leads.map((lead) => {\n  const type = statusType.get(lead.status_id) ?? 'open';\n  return {\n    json: {\n      lead_id: lead.id,\n      name: lead.name,\n      price: lead.price ?? 0,\n      pipeline_id: lead.pipeline_id,\n      status_id: lead.status_id,\n      responsible_user_id: lead.responsible_user_id,\n      responsible_user_name: userNameById.get(lead.responsible_user_id) ?? null,\n      created_at: toIso(lead.created_at),\n      updated_at: toIso(lead.updated_at),\n      closed_at: toIso(lead.closed_at),\n      is_won: type === 'won',\n      is_lost: type === 'lost',\n      loss_reason_id: lead.loss_reason_id ?? null,\n      loss_reason_name: lead.loss_reason_id ? (lossReasonById.get(lead.loss_reason_id) ?? null) : null,\n      campaign: extractCustomField(lead, fieldMap.campaign),\n      adset: extractCustomField(lead, fieldMap.adset),\n      ad: extractCustomField(lead, fieldMap.ad),\n      fecha_agenda: extractCustomFieldDate(lead, fieldMap.agenda),\n      fecha_cita_asistida: extractCustomFieldDate(lead, fieldMap.cita_asistida),\n      fecha_cotizacion: extractCustomFieldDate(lead, fieldMap.cotizacion),\n    },\n  };\n});\n"
+      }
+    },
+    {
+      "id": "checkNextPage",
+      "name": "Check next page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 500],
+      "notes": "Decides whether to loop back for another page, based on Kommo's own _links.next (per their documented pagination recipe).",
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst hasNext = !!response._links?.next?.href;\nconst currentPage = response._page ?? 1;\nreturn [{ json: { route: hasNext ? 'loop' : 'done', page: currentPage + 1 } }];\n"
       }
     },
     {
@@ -124,7 +135,7 @@
       "name": "More pages?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [920, 390],
+      "position": [920, 500],
       "parameters": {
         "conditions": {
           "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
@@ -158,17 +169,6 @@
       "position": [520, 130],
       "parameters": {
         "jsCode": "const reasons = $input.first().json._embedded?.loss_reasons ?? [];\nreturn reasons.map((r) => ({ json: { loss_reason_id: r.id, name: r.name } }));\n"
-      }
-    },
-    {
-      "id": "transformLeads",
-      "name": "Transform leads",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1140, 390],
-      "notes": "Field IDs below are specific to this Kommo account (from scripts/setup-kommo.ts output): agenda=Próxima cita, cita_asistida + cotizacion created by the script, campaign/adset/ad reused from existing fields.",
-      "parameters": {
-        "jsCode": "const fieldMap = {\n  agenda: 3010723,\n  cita_asistida: 3028076,\n  cotizacion: 3028078,\n  campaign: 2972918,\n  adset: 2972920,\n  ad: 2972924,\n};\n\nconst users = $('Get Users').first().json._embedded?.users ?? [];\nconst userNameById = new Map(users.map((u) => [u.id, u.name]));\n\nconst pipelines = $('Get Pipelines').first().json._embedded?.pipelines ?? [];\nconst statusType = new Map();\nfor (const p of pipelines) {\n  for (const s of p._embedded?.statuses ?? []) {\n    let type = 'open';\n    if (s.id === 142) type = 'won';\n    if (s.id === 143) type = 'lost';\n    statusType.set(s.id, type);\n  }\n}\n\nconst lossReasons = $('Get Loss Reasons').first().json._embedded?.loss_reasons ?? [];\nconst lossReasonById = new Map(lossReasons.map((r) => [r.id, r.name]));\n\nconst toIso = (unixSeconds) => (unixSeconds ? new Date(unixSeconds * 1000).toISOString() : null);\nfunction extractCustomField(lead, fieldId) {\n  const cf = (lead.custom_fields_values || []).find((f) => f.field_id === fieldId);\n  return cf?.values?.[0]?.value ?? null;\n}\nfunction extractCustomFieldDate(lead, fieldId) {\n  const raw = extractCustomField(lead, fieldId);\n  const n = Number(raw);\n  return raw != null && Number.isFinite(n) ? toIso(n) : null;\n}\n\nconst allLeads = $input.first().json.leads ?? [];\n\nreturn allLeads.map((lead) => {\n  const type = statusType.get(lead.status_id) ?? 'open';\n  return {\n    json: {\n      lead_id: lead.id,\n      name: lead.name,\n      price: lead.price ?? 0,\n      pipeline_id: lead.pipeline_id,\n      status_id: lead.status_id,\n      responsible_user_id: lead.responsible_user_id,\n      responsible_user_name: userNameById.get(lead.responsible_user_id) ?? null,\n      created_at: toIso(lead.created_at),\n      updated_at: toIso(lead.updated_at),\n      closed_at: toIso(lead.closed_at),\n      is_won: type === 'won',\n      is_lost: type === 'lost',\n      loss_reason_id: lead.loss_reason_id ?? null,\n      loss_reason_name: lead.loss_reason_id ? (lossReasonById.get(lead.loss_reason_id) ?? null) : null,\n      campaign: extractCustomField(lead, fieldMap.campaign),\n      adset: extractCustomField(lead, fieldMap.adset),\n      ad: extractCustomField(lead, fieldMap.ad),\n      fecha_agenda: extractCustomFieldDate(lead, fieldMap.agenda),\n      fecha_cita_asistida: extractCustomFieldDate(lead, fieldMap.cita_asistida),\n      fecha_cotizacion: extractCustomFieldDate(lead, fieldMap.cotizacion),\n    },\n  };\n});\n"
       }
     },
     {
@@ -206,7 +206,7 @@
       "name": "Upsert kommo_leads",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1360, 390],
+      "position": [920, 280],
       "parameters": {
         "operation": "executeQuery",
         "query": "INSERT INTO kommo_leads (lead_id, name, price, pipeline_id, status_id, responsible_user_id, responsible_user_name, created_at, updated_at, closed_at, is_won, is_lost, loss_reason_id, loss_reason_name, campaign, adset, ad, fecha_agenda, fecha_cita_asistida, fecha_cotizacion, synced_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20, now()) ON CONFLICT (lead_id) DO UPDATE SET name=excluded.name, price=excluded.price, pipeline_id=excluded.pipeline_id, status_id=excluded.status_id, responsible_user_id=excluded.responsible_user_id, responsible_user_name=excluded.responsible_user_name, created_at=excluded.created_at, updated_at=excluded.updated_at, closed_at=excluded.closed_at, is_won=excluded.is_won, is_lost=excluded.is_lost, loss_reason_id=excluded.loss_reason_id, loss_reason_name=excluded.loss_reason_name, campaign=excluded.campaign, adset=excluded.adset, ad=excluded.ad, fecha_agenda=excluded.fecha_agenda, fecha_cita_asistida=excluded.fecha_cita_asistida, fecha_cotizacion=excluded.fecha_cotizacion, synced_at=now();",
@@ -237,17 +237,22 @@
     "Get Pipelines": { "main": [[{ "node": "Flatten statuses", "type": "main", "index": 0 }]] },
     "Get Loss Reasons": { "main": [[{ "node": "Flatten loss reasons", "type": "main", "index": 0 }]] },
     "Fetch Leads Page": { "main": [[{ "node": "Wait 350ms", "type": "main", "index": 0 }]] },
-    "Wait 350ms": { "main": [[{ "node": "Collect & route", "type": "main", "index": 0 }]] },
-    "Collect & route": { "main": [[{ "node": "More pages?", "type": "main", "index": 0 }]] },
+    "Wait 350ms": {
+      "main": [[
+        { "node": "Transform page", "type": "main", "index": 0 },
+        { "node": "Check next page", "type": "main", "index": 0 }
+      ]]
+    },
+    "Transform page": { "main": [[{ "node": "Upsert kommo_leads", "type": "main", "index": 0 }]] },
+    "Check next page": { "main": [[{ "node": "More pages?", "type": "main", "index": 0 }]] },
     "More pages?": {
       "main": [
         [{ "node": "Fetch Leads Page", "type": "main", "index": 0 }],
-        [{ "node": "Transform leads", "type": "main", "index": 0 }]
+        []
       ]
     },
     "Flatten statuses": { "main": [[{ "node": "Upsert kommo_statuses", "type": "main", "index": 0 }]] },
-    "Flatten loss reasons": { "main": [[{ "node": "Upsert kommo_loss_reasons", "type": "main", "index": 0 }]] },
-    "Transform leads": { "main": [[{ "node": "Upsert kommo_leads", "type": "main", "index": 0 }]] }
+    "Flatten loss reasons": { "main": [[{ "node": "Upsert kommo_loss_reasons", "type": "main", "index": 0 }]] }
   },
   "settings": {}
 }
