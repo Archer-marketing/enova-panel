@@ -112,18 +112,18 @@ cuándo sucedió, no cuándo se generó el lead"):
 | Métrica | Columna de fecha usada |
 |---|---|
 | Leads asignados / activos | `created_at` |
-| Perdidos | `closed_at` (con `is_lost`) |
-| Ganados | `closed_at` (con `is_won`) — status real de Kommo |
+| Perdidos | `closed_at` (con `is_lost`) — status real de Kommo |
+| Ganados = Cierres | `fecha_cierre` — campo custom |
 | Citas agendadas | `fecha_agenda` |
 | Citas asistidas | `fecha_cita_asistida` |
 | Cotizaciones | `fecha_cotizacion` |
-| Cierres | `fecha_cierre` — campo custom, independiente del status de Kommo |
 
-"Ganados" y "Cierres" son métricas distintas a propósito: "Ganados" viene
-del status real del lead en Kommo (llegó al stage final id 142), mientras
-que "Cierres" es un evento de negocio marcado a mano vía el custom field
-`fecha_cierre`, igual que agenda/asistida/cotización — puede no coincidir
-con el momento exacto en que Kommo marca el lead como ganado.
+"Ganados" y "Cierres" son la misma métrica (a pedido del usuario): ambas
+salen de `fecha_cierre`, el campo custom que se marca a mano al cerrar el
+lead — no del status interno de Kommo (`is_won`/stage id 142). `is_won`
+solo se sigue usando para "Activos" (leads que no están ni ganados ni
+perdidos según Kommo). "Perdidos" sí sigue atado al status real
+(`is_lost` + `closed_at`), no tiene un campo custom equivalente.
 
 Ver `src/lib/metrics.ts` para la implementación exacta (agregación con
 `FILTER (WHERE columna >= $from AND columna < $to::date + 1)` por

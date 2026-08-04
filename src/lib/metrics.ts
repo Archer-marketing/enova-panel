@@ -107,8 +107,6 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
       count(*) FILTER (WHERE created_at >= $${fromIdx} AND created_at < $${toIdx}::date + 1) AS leads_asignados,
       count(*) FILTER (WHERE created_at >= $${fromIdx} AND created_at < $${toIdx}::date + 1 AND NOT is_won AND NOT is_lost) AS leads_activos,
       count(*) FILTER (WHERE closed_at >= $${fromIdx} AND closed_at < $${toIdx}::date + 1 AND is_lost) AS leads_perdidos,
-      count(*) FILTER (WHERE closed_at >= $${fromIdx} AND closed_at < $${toIdx}::date + 1 AND is_won) AS leads_ganados,
-      coalesce(sum(price) FILTER (WHERE closed_at >= $${fromIdx} AND closed_at < $${toIdx}::date + 1 AND is_won), 0) AS monto_ganado,
       count(*) FILTER (WHERE fecha_agenda >= $${fromIdx} AND fecha_agenda < $${toIdx}::date + 1) AS citas_agendadas,
       count(*) FILTER (WHERE fecha_cita_asistida >= $${fromIdx} AND fecha_cita_asistida < $${toIdx}::date + 1) AS citas_asistidas,
       count(*) FILTER (WHERE fecha_cotizacion >= $${fromIdx} AND fecha_cotizacion < $${toIdx}::date + 1) AS cotizaciones,
@@ -156,14 +154,16 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
     row.leadsAsignados = Number(r.leads_asignados);
     row.leadsActivos = Number(r.leads_activos);
     row.leadsPerdidos = Number(r.leads_perdidos);
-    row.leadsGanados = Number(r.leads_ganados);
-    row.montoGanado = Number(r.monto_ganado);
     row.citasAgendadas = Number(r.citas_agendadas);
     row.citasAsistidas = Number(r.citas_asistidas);
     row.cotizaciones = Number(r.cotizaciones);
     row.valorCotizado = Number(r.valor_cotizado);
     row.cierres = Number(r.cierres);
     row.valorCierre = Number(r.valor_cierre);
+    // "Ganados" = "Cierres": ambos vienen de fecha_cierre, no del status
+    // interno de Kommo (a pedido del usuario).
+    row.leadsGanados = row.cierres;
+    row.montoGanado = row.valorCierre;
 
     row.pctAgendaSobreLeads = pct(row.citasAgendadas, row.leadsAsignados);
     row.pctAsistenciaSobreAgenda = pct(row.citasAsistidas, row.citasAgendadas);
