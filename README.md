@@ -56,7 +56,7 @@ con el SQL que ya está en el JSON, que es la parte que importa.
    `kommo-won-lost-webhook.json`, aún inactivo, que puedes ver en n8n antes
    de activarlo), luego `npm run setup:kommo`. Esto:
    - crea los custom fields `fecha_agenda`, `fecha_cita_asistida`,
-     `fecha_cotizacion` en Kommo (si no existen),
+     `fecha_cotizacion`, `fecha_cierre` en Kommo (si no existen),
    - localiza los custom fields de campaña/adset/ad ya existentes,
    - sincroniza pipelines/statuses y razones de pérdida a Postgres,
    - registra el webhook en Kommo,
@@ -113,13 +113,22 @@ cuándo sucedió, no cuándo se generó el lead"):
 |---|---|
 | Leads asignados / activos | `created_at` |
 | Perdidos | `closed_at` (con `is_lost`) |
-| Ganados / Cierres | `closed_at` (con `is_won`) |
+| Ganados | `closed_at` (con `is_won`) — status real de Kommo |
 | Citas agendadas | `fecha_agenda` |
 | Citas asistidas | `fecha_cita_asistida` |
 | Cotizaciones | `fecha_cotizacion` |
+| Cierres | `fecha_cierre` — campo custom, independiente del status de Kommo |
+
+"Ganados" y "Cierres" son métricas distintas a propósito: "Ganados" viene
+del status real del lead en Kommo (llegó al stage final id 142), mientras
+que "Cierres" es un evento de negocio marcado a mano vía el custom field
+`fecha_cierre`, igual que agenda/asistida/cotización — puede no coincidir
+con el momento exacto en que Kommo marca el lead como ganado.
 
 Ver `src/lib/metrics.ts` para la implementación exacta (agregación con
-`FILTER (WHERE columna BETWEEN $from AND $to)` por métrica).
+`FILTER (WHERE columna >= $from AND columna < $to::date + 1)` por
+métrica — el límite superior es exclusivo para incluir el día completo
+de "Hasta").
 
 ## Estructura del proyecto
 

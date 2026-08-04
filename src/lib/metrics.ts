@@ -112,7 +112,9 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
       count(*) FILTER (WHERE fecha_agenda >= $${fromIdx} AND fecha_agenda < $${toIdx}::date + 1) AS citas_agendadas,
       count(*) FILTER (WHERE fecha_cita_asistida >= $${fromIdx} AND fecha_cita_asistida < $${toIdx}::date + 1) AS citas_asistidas,
       count(*) FILTER (WHERE fecha_cotizacion >= $${fromIdx} AND fecha_cotizacion < $${toIdx}::date + 1) AS cotizaciones,
-      coalesce(sum(price) FILTER (WHERE fecha_cotizacion >= $${fromIdx} AND fecha_cotizacion < $${toIdx}::date + 1), 0) AS valor_cotizado
+      coalesce(sum(price) FILTER (WHERE fecha_cotizacion >= $${fromIdx} AND fecha_cotizacion < $${toIdx}::date + 1), 0) AS valor_cotizado,
+      count(*) FILTER (WHERE fecha_cierre >= $${fromIdx} AND fecha_cierre < $${toIdx}::date + 1) AS cierres,
+      coalesce(sum(price) FILTER (WHERE fecha_cierre >= $${fromIdx} AND fecha_cierre < $${toIdx}::date + 1), 0) AS valor_cierre
     FROM kommo_leads
     ${structural.clause}
     GROUP BY ${dim.groupBy}
@@ -160,9 +162,8 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
     row.citasAsistidas = Number(r.citas_asistidas);
     row.cotizaciones = Number(r.cotizaciones);
     row.valorCotizado = Number(r.valor_cotizado);
-
-    row.cierres = row.leadsGanados;
-    row.valorCierre = row.montoGanado;
+    row.cierres = Number(r.cierres);
+    row.valorCierre = Number(r.valor_cierre);
 
     row.pctAgendaSobreLeads = pct(row.citasAgendadas, row.leadsAsignados);
     row.pctAsistenciaSobreAgenda = pct(row.citasAsistidas, row.citasAgendadas);
@@ -211,7 +212,7 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
   totals.citasAsistidas = rows.reduce((s, r) => s + r.citasAsistidas, 0);
   totals.cotizaciones = rows.reduce((s, r) => s + r.cotizaciones, 0);
   totals.valorCotizado = totalValorCotizado;
-  totals.cierres = totals.leadsGanados;
+  totals.cierres = rows.reduce((s, r) => s + r.cierres, 0);
   totals.valorCierre = totalValorCierre;
   totals.pctAgendaSobreLeads = pct(totals.citasAgendadas, totals.leadsAsignados);
   totals.pctAsistenciaSobreAgenda = pct(totals.citasAsistidas, totals.citasAgendadas);
