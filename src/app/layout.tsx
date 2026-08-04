@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { NavLinks } from "@/components/NavLinks";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -12,8 +12,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es">
       <body>
         <nav className="nav">
-          <Link href="/asesores">Asesores</Link>
-          <Link href="/campanas">Campañas</Link>
+          <NavLinks />
         </nav>
         {children}
       </body>

@@ -125,7 +125,7 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
 
   return (
     <div className="container">
-      <div className="filter-bar">
+      <div className="toolbar">
         <div className="filter-field">
           <label>Desde</label>
           <input type="date" value={from} onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))} />
@@ -216,33 +216,38 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
       ) : (
         <>
           <div className="stat-grid">
-            <StatTile label="Leads asignados" value={formatNumber(totals.leadsAsignados)} />
-            <StatTile label="Activos" value={formatNumber(totals.leadsActivos)} />
-            <StatTile label="Perdidos" value={formatNumber(totals.leadsPerdidos)} />
+            <StatTile label="Leads asignados" value={formatNumber(totals.leadsAsignados)} tone="accent" />
+            <StatTile label="Activos" value={formatNumber(totals.leadsActivos)} tone="neutral" />
+            <StatTile label="Perdidos" value={formatNumber(totals.leadsPerdidos)} tone="critical" />
             <StatTile
               label="Ganados"
               value={formatNumber(totals.leadsGanados)}
               sub={formatCurrency(totals.montoGanado)}
+              tone="good"
             />
             <StatTile
               label="Citas agendadas"
               value={formatNumber(totals.citasAgendadas)}
               sub={`${formatPercent(totals.pctAgendaSobreLeads)} sobre leads`}
+              tone="neutral"
             />
             <StatTile
               label="Citas asistidas"
               value={formatNumber(totals.citasAsistidas)}
               sub={`${formatPercent(totals.pctAsistenciaSobreAgenda)} sobre agenda`}
+              tone="neutral"
             />
             <StatTile
               label="Cotizaciones"
               value={formatNumber(totals.cotizaciones)}
               sub={`${formatCurrency(totals.valorCotizado)} · prom. ${formatCurrency(totals.promedioCotizado)}`}
+              tone="warning"
             />
             <StatTile
               label="Cierres"
               value={formatNumber(totals.cierres)}
               sub={`${formatCurrency(totals.valorCierre)} · ${formatPercent(totals.pctCierreSobreCotizacion)} sobre coti`}
+              tone="good"
             />
           </div>
 
