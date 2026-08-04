@@ -1,7 +1,18 @@
 import type { FunnelRow } from "@/lib/types";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 
-export function MetricsTable({ rows, totals, dimensionLabel }: { rows: FunnelRow[]; totals: FunnelRow; dimensionLabel: string }) {
+export function MetricsTable({
+  rows,
+  totals,
+  dimensionLabel,
+  onRowClick,
+}: {
+  rows: FunnelRow[];
+  totals: FunnelRow;
+  dimensionLabel: string;
+  /** When set, every non-total row becomes clickable (drill-down). */
+  onRowClick?: (dimensionValue: string) => void;
+}) {
   const allRows = [...rows, totals];
 
   return (
@@ -34,9 +45,18 @@ export function MetricsTable({ rows, totals, dimensionLabel }: { rows: FunnelRow
           </tr>
         </thead>
         <tbody>
-          {allRows.map((r) => (
-            <tr key={r.dimensionValue}>
-              <td>{r.dimensionValue}</td>
+          {allRows.map((r) => {
+            const clickable = onRowClick && r !== totals;
+            return (
+            <tr
+              key={r.dimensionValue}
+              className={clickable ? "row-clickable" : undefined}
+              onClick={clickable ? () => onRowClick(r.dimensionValue) : undefined}
+            >
+              <td>
+                {r.dimensionValue}
+                {clickable ? <span className="row-drill-hint">›</span> : null}
+              </td>
               <td>{formatNumber(r.leadsAsignados)}</td>
               <td>{formatNumber(r.leadsActivos)}</td>
               <td>{formatPercent(r.pctActivosSobreLeads)}</td>
@@ -59,7 +79,8 @@ export function MetricsTable({ rows, totals, dimensionLabel }: { rows: FunnelRow
               <td>{formatPercent(r.pctCierreSobreCotizacion)}</td>
               <td>{formatPercent(r.pctCierreSobreAsistencia)}</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

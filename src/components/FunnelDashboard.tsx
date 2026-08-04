@@ -9,11 +9,18 @@ import { MetricsTable } from "./MetricsTable";
 import { PipelineAndLoss } from "./PipelineAndLoss";
 import { MultiSelectDropdown } from "./MultiSelectDropdown";
 
+type Campana = { campaign: string | null; adset: string | null; ad: string | null };
+
 type FiltersResponse = {
   asesores: { id: string; name: string }[];
-  campaigns: string[];
-  adsets: string[];
-  ads: string[];
+  campanas: Campana[];
+};
+
+const DIMENSION_LABEL: Record<Dimension, string> = {
+  asesor: "Asesor",
+  campaign: "Campaña",
+  adset: "Conjunto de anuncios",
+  ad: "Anuncio",
 };
 
 function defaultDateRange() {
@@ -28,10 +35,15 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
   const [{ from, to }, setRange] = useState(defaultDateRange());
   const [filters, setFilters] = useState<FiltersResponse | null>(null);
   const [selectedAsesores, setSelectedAsesores] = useState<string[]>([]);
-  const [dimension, setDimension] = useState<Dimension>("campaign");
-  const [campaignFilter, setCampaignFilter] = useState("");
-  const [adsetFilter, setAdsetFilter] = useState("");
+
+  // Campañas mode is a Meta-style drill-down: campaign -> adset -> ad.
+  // The current level is derived from how deep we've drilled, not chosen
+  // separately, so the UI can never end up in an inconsistent state (e.g.
+  // "group by ad" while filtered to a campaign that isn't shown anywhere).
+  const [drillCampaign, setDrillCampaign] = useState("");
+  const [drillAdset, setDrillAdset] = useState("");
   const [selectedValues, setSelectedValues] = useState<string[]>([]);
+
   const [report, setReport] = useState<FunnelReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,16 +52,19 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
 
+  const campanasDimension: Dimension = !drillCampaign ? "campaign" : !drillAdset ? "adset" : "ad";
+  const dimension: Dimension = mode === "asesores" ? "asesor" : campanasDimension;
+
   useEffect(() => {
     fetch("/api/reports/filters")
       .then((r) => r.json())
       .then(setFilters)
-      .catch(() => setFilters({ asesores: [], campaigns: [], adsets: [], ads: [] }));
+      .catch(() => setFilters({ asesores: [], campanas: [] }));
   }, []);
 
   useEffect(() => {
     setSelectedValues([]);
-  }, [dimension, campaignFilter, adsetFilter]);
+  }, [drillCampaign, drillAdset]);
 
   useEffect(() => {
     const params = new URLSearchParams({ from, to });
@@ -58,9 +73,9 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
       if (selectedAsesores.length) params.set("asesores", selectedAsesores.join(","));
       url = `/api/reports/asesores?${params.toString()}`;
     } else {
-      params.set("dimension", dimension);
-      if (campaignFilter) params.set("campaign", campaignFilter);
-      if (adsetFilter) params.set("adset", adsetFilter);
+      params.set("dimension", campanasDimension);
+      if (drillCampaign) params.set("campaign", drillCampaign);
+      if (drillAdset) params.set("adset", drillAdset);
       if (selectedValues.length) params.set("values", selectedValues.join(","));
       url = `/api/reports/campanas?${params.toString()}`;
     }
@@ -78,7 +93,7 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
       .catch((e) => setError(e.message ?? "Error al cargar el reporte"))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, from, to, selectedAsesores, dimension, campaignFilter, adsetFilter, selectedValues, refreshTick]);
+  }, [mode, from, to, selectedAsesores, campanasDimension, drillCampaign, drillAdset, selectedValues, refreshTick]);
 
   async function handleRefresh() {
     setSyncing(true);
@@ -103,12 +118,16 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
     setRefreshTick((t) => t + 1);
   }
 
-  const valueOptions = useMemo(() => {
+  // Options for the "filtrar" multi-select, and for the drill-down clicks:
+  // whatever campaign/adset/ad values exist under the current scope.
+  const levelOptions = useMemo(() => {
     if (!filters) return [];
-    if (dimension === "campaign") return filters.campaigns;
-    if (dimension === "adset") return filters.adsets;
-    return filters.ads;
-  }, [filters, dimension]);
+    const scoped = filters.campanas.filter(
+      (c) => (!drillCampaign || c.campaign === drillCampaign) && (!drillAdset || c.adset === drillAdset)
+    );
+    const field = campanasDimension === "campaign" ? "campaign" : campanasDimension === "adset" ? "adset" : "ad";
+    return [...new Set(scoped.map((c) => c[field]).filter(Boolean))] as string[];
+  }, [filters, drillCampaign, drillAdset, campanasDimension]);
 
   const totals = report?.totals;
   const rows = report?.rows ?? [];
@@ -124,8 +143,47 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
     [rows]
   );
 
+  const canDrillDeeper = mode === "campanas" && campanasDimension !== "ad";
+  function handleDrill(value: string) {
+    if (campanasDimension === "campaign") setDrillCampaign(value);
+    else if (campanasDimension === "adset") setDrillAdset(value);
+  }
+
   return (
     <div className="container">
+      {mode === "campanas" ? (
+        <div className="breadcrumb">
+          <button
+            type="button"
+            className={!drillCampaign ? "breadcrumb-current" : "breadcrumb-link"}
+            onClick={() => {
+              setDrillCampaign("");
+              setDrillAdset("");
+            }}
+          >
+            Todas las campañas
+          </button>
+          {drillCampaign ? (
+            <>
+              <span className="breadcrumb-sep">›</span>
+              <button
+                type="button"
+                className={!drillAdset ? "breadcrumb-current" : "breadcrumb-link"}
+                onClick={() => setDrillAdset("")}
+              >
+                {drillCampaign}
+              </button>
+            </>
+          ) : null}
+          {drillAdset ? (
+            <>
+              <span className="breadcrumb-sep">›</span>
+              <span className="breadcrumb-current">{drillAdset}</span>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="toolbar">
         <div className="filter-field">
           <label>Desde</label>
@@ -147,47 +205,15 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
             />
           </div>
         ) : (
-          <>
-            <div className="filter-field">
-              <label>Agrupar por</label>
-              <select value={dimension} onChange={(e) => setDimension(e.target.value as Dimension)}>
-                <option value="campaign">Campaña</option>
-                <option value="adset">Adset</option>
-                <option value="ad">Ad</option>
-              </select>
-            </div>
-            <div className="filter-field">
-              <label>Campaña</label>
-              <select value={campaignFilter} onChange={(e) => setCampaignFilter(e.target.value)}>
-                <option value="">Todas</option>
-                {filters?.campaigns.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="filter-field">
-              <label>Adset</label>
-              <select value={adsetFilter} onChange={(e) => setAdsetFilter(e.target.value)}>
-                <option value="">Todos</option>
-                {filters?.adsets.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="filter-field">
-              <label>Valores ({dimension})</label>
-              <MultiSelectDropdown
-                placeholder="Todos"
-                options={valueOptions.map((v) => ({ id: v, name: v }))}
-                selected={selectedValues}
-                onChange={setSelectedValues}
-              />
-            </div>
-          </>
+          <div className="filter-field">
+            <label>Filtrar {DIMENSION_LABEL[campanasDimension].toLowerCase()}</label>
+            <MultiSelectDropdown
+              placeholder="Todos"
+              options={levelOptions.map((v) => ({ id: v, name: v }))}
+              selected={selectedValues}
+              onChange={setSelectedValues}
+            />
+          </div>
         )}
 
         <div className="filter-field filter-actions">
@@ -251,7 +277,7 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
             />
           </div>
 
-          <div className="section-title">{mode === "asesores" ? "Leads asignados vs. ganados por asesor" : `Leads asignados vs. ganados por ${dimension}`}</div>
+          <div className="section-title">Leads asignados vs. ganados por {DIMENSION_LABEL[dimension].toLowerCase()}</div>
           <div className="card">
             {topRows.length ? (
               <BarChart
@@ -261,15 +287,21 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
                   { name: "Ganados", color: "var(--series-2)" },
                 ]}
                 formatValue={formatNumber}
+                onRowClick={canDrillDeeper ? handleDrill : undefined}
               />
             ) : (
               <div className="empty">Sin datos en el rango seleccionado.</div>
             )}
           </div>
 
-          <div className="section-title">Detalle por {mode === "asesores" ? "asesor" : dimension}</div>
+          <div className="section-title">Detalle por {DIMENSION_LABEL[dimension].toLowerCase()}</div>
           <div className="card">
-            <MetricsTable rows={rows} totals={totals} dimensionLabel={mode === "asesores" ? "Asesor" : dimension} />
+            <MetricsTable
+              rows={rows}
+              totals={totals}
+              dimensionLabel={DIMENSION_LABEL[dimension]}
+              onRowClick={canDrillDeeper ? handleDrill : undefined}
+            />
           </div>
 
           <div className="section-title">

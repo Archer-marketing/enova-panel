@@ -228,6 +228,47 @@ a {
   color: var(--text-primary);
 }
 
+/* ---------- Breadcrumb (campaign -> adset -> ad drill-down) ---------- */
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--space-3);
+  font-size: 13px;
+}
+
+.breadcrumb-sep {
+  color: var(--text-muted);
+}
+
+.breadcrumb-link,
+.breadcrumb-current {
+  font: inherit;
+  border: none;
+  background: none;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+}
+
+.breadcrumb-link {
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.breadcrumb-link:hover {
+  background: var(--accent-tint);
+  text-decoration: underline;
+}
+
+.breadcrumb-current {
+  color: var(--text-primary);
+  font-weight: 700;
+  cursor: default;
+}
+
 /* ---------- Filter toolbar ---------- */
 
 .toolbar {
@@ -573,6 +614,20 @@ table.report-table tbody tr:last-child:hover {
   background: var(--surface-1);
 }
 
+tr.row-clickable {
+  cursor: pointer;
+}
+
+tr.row-clickable:hover {
+  background: var(--accent-tint);
+}
+
+.row-drill-hint {
+  color: var(--accent);
+  margin-left: 6px;
+  font-weight: 700;
+}
+
 .table-scroll {
   overflow-x: auto;
   border-radius: var(--radius-md);
@@ -607,6 +662,15 @@ table.report-table tbody tr:last-child:hover {
   grid-template-columns: 160px 1fr;
   gap: var(--space-3);
   align-items: center;
+  border-radius: var(--radius-sm);
+}
+
+.bar-row-clickable {
+  cursor: pointer;
+}
+
+.bar-row-clickable:hover {
+  background: var(--accent-tint);
 }
 
 .bar-row-label {

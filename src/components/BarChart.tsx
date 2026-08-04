@@ -12,10 +12,13 @@ export function BarChart({
   rows,
   series,
   formatValue,
+  onRowClick,
 }: {
   rows: BarRow[];
   series: Series[];
   formatValue: (n: number) => string;
+  /** When set, rows become clickable (drill-down). */
+  onRowClick?: (label: string) => void;
 }) {
   const max = Math.max(1, ...rows.flatMap((r) => r.values));
 
@@ -33,9 +36,14 @@ export function BarChart({
       ) : null}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {rows.map((row) => (
-          <div className="bar-row" key={row.label}>
+          <div
+            className={onRowClick ? "bar-row bar-row-clickable" : "bar-row"}
+            key={row.label}
+            onClick={onRowClick ? () => onRowClick(row.label) : undefined}
+          >
             <div className="bar-row-label" title={row.label}>
               {row.label}
+              {onRowClick ? <span className="row-drill-hint">›</span> : null}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {row.values.map((value, i) => (
