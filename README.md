@@ -77,7 +77,8 @@ con el SQL que ya está en el JSON, que es la parte que importa.
 ```
 Kommo CRM ──(hourly poll, ~3 req/s)──▶ n8n "kommo-sync-full"      ──▶ Postgres
 Kommo CRM ──(webhook status change)──▶ n8n "kommo-won-lost-webhook" ──▶ Postgres
-Postgres ◀──(SQL vía pg)── Next.js dashboard (solo lectura)
+Postgres ◀──(SQL vía pg)── Next.js dashboard (lectura)
+Next.js dashboard ──(botón "Actualizar", POST /api/sync)──▶ n8n "kommo-sync-full" (webhook manual)
 ```
 
 - `kommo-sync-full` es la fuente de verdad: pagina todos los leads cada
@@ -86,7 +87,15 @@ Postgres ◀──(SQL vía pg)── Next.js dashboard (solo lectura)
 - `kommo-won-lost-webhook` es una optimización de frescura: cuando Kommo
   notifica un cambio de lead, refresca esa fila de inmediato si el lead
   quedó ganado o perdido, sin esperar la corrida horaria.
-- El dashboard nunca escribe a Kommo ni a n8n; solo lee Postgres.
+- El dashboard lee Postgres para armar los reportes. El botón
+  **Actualizar** es la única acción que escribe fuera de Postgres: llama a
+  `POST /api/sync`, que dispara el webhook manual
+  (`kommo-sync-full-manual`) del workflow `kommo-sync-full` en n8n y
+  espera a que termine (ese webhook responde `lastNode`, o sea al
+  finalizar el workflow) antes de volver a leer Postgres. Requiere
+  `N8N_SYNC_WEBHOOK_URL` configurada en el servidor del dashboard (ver
+  `.env.example`); si falta o falla, el botón muestra el error pero igual
+  refresca con lo que ya haya en Postgres.
 
 ## Semántica de fechas (importante)
 

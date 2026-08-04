@@ -270,3 +270,7 @@ table.report-table tbody tr:last-child {
   color: var(--text-muted);
   white-space: nowrap;
 }
+
+.last-updated.sync-error {
+  color: var(--status-critical);
+}

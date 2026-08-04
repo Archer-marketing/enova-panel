@@ -36,6 +36,8 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/reports/filters")
@@ -77,7 +79,18 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, from, to, selectedAsesores, dimension, campaignFilter, adsetFilter, selectedValues, refreshTick]);
 
-  function handleRefresh() {
+  async function handleRefresh() {
+    setSyncing(true);
+    setSyncError(null);
+    try {
+      const res = await fetch("/api/sync", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setSyncError(data.error ?? "No se pudo sincronizar con Kommo.");
+    } catch {
+      setSyncError("No se pudo sincronizar con Kommo.");
+    } finally {
+      setSyncing(false);
+    }
     setRange((r) => ({ ...r, to: defaultDateRange().to }));
     setRefreshTick((t) => t + 1);
   }
@@ -176,10 +189,12 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
         )}
 
         <div className="filter-field filter-actions">
-          <button type="button" className="btn" onClick={handleRefresh} disabled={loading}>
-            {loading ? "Actualizando…" : "Actualizar"}
+          <button type="button" className="btn" onClick={handleRefresh} disabled={syncing || loading}>
+            {syncing ? "Sincronizando con Kommo…" : loading ? "Actualizando…" : "Actualizar"}
           </button>
-          {lastUpdated ? (
+          {syncError ? (
+            <span className="last-updated sync-error">{syncError}</span>
+          ) : lastUpdated ? (
             <span className="last-updated">
               Actualizado {lastUpdated.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
             </span>
