@@ -12,7 +12,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es">
       <body>
         <nav className="nav">
-          <img src="/enova-logo.png" alt="Enova" className="nav-logo" width={448} height={266} />
+          <div className="nav-logo-plate">
+            <img src="/enova-logo.png" alt="Enova" className="nav-logo" width={904} height={514} />
+          </div>
           <div className="nav-links">
             <NavLinks />
           </div>
