@@ -143,6 +143,19 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
     [rows]
   );
 
+  // Who/what actually closes deals — ranked by cierres, not by lead
+  // volume, so a small campaign or adset with a high close rate still
+  // shows up even if it never makes the "top by leads" cut above.
+  const topCierreRows = useMemo(
+    () =>
+      [...rows]
+        .filter((r) => r.cierres > 0)
+        .sort((a, b) => b.cierres - a.cierres)
+        .slice(0, 10)
+        .map((r) => ({ label: r.dimensionValue, values: [r.cierres] })),
+    [rows]
+  );
+
   const canDrillDeeper = mode === "campanas" && campanasDimension !== "ad";
   function handleDrill(value: string) {
     if (campanasDimension === "campaign") setDrillCampaign(value);
@@ -291,6 +304,20 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
               />
             ) : (
               <div className="empty">Sin datos en el rango seleccionado.</div>
+            )}
+          </div>
+
+          <div className="section-title">Cierres por {DIMENSION_LABEL[dimension].toLowerCase()}</div>
+          <div className="card">
+            {topCierreRows.length ? (
+              <BarChart
+                rows={topCierreRows}
+                series={[{ name: "Cierres", color: "var(--good)" }]}
+                formatValue={formatNumber}
+                onRowClick={canDrillDeeper ? handleDrill : undefined}
+              />
+            ) : (
+              <div className="empty">Sin cierres en el rango seleccionado.</div>
             )}
           </div>
 
