@@ -7,6 +7,7 @@ import { StatTile } from "./StatTile";
 import { BarChart } from "./BarChart";
 import { MetricsTable } from "./MetricsTable";
 import { PipelineAndLoss } from "./PipelineAndLoss";
+import { MultiSelectDropdown } from "./MultiSelectDropdown";
 
 type FiltersResponse = {
   asesores: { id: string; name: string }[];
@@ -138,17 +139,12 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
         {mode === "asesores" ? (
           <div className="filter-field">
             <label>Asesores</label>
-            <select
-              multiple
-              value={selectedAsesores}
-              onChange={(e) => setSelectedAsesores(Array.from(e.target.selectedOptions, (o) => o.value))}
-            >
-              {filters?.asesores.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
+            <MultiSelectDropdown
+              placeholder="Todos"
+              options={filters?.asesores ?? []}
+              selected={selectedAsesores}
+              onChange={setSelectedAsesores}
+            />
           </div>
         ) : (
           <>
@@ -184,13 +180,12 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
             </div>
             <div className="filter-field">
               <label>Valores ({dimension})</label>
-              <select multiple value={selectedValues} onChange={(e) => setSelectedValues(Array.from(e.target.selectedOptions, (o) => o.value))}>
-                {valueOptions.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
+              <MultiSelectDropdown
+                placeholder="Todos"
+                options={valueOptions.map((v) => ({ id: v, name: v }))}
+                selected={selectedValues}
+                onChange={setSelectedValues}
+              />
             </div>
           </>
         )}
@@ -217,7 +212,12 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
         <>
           <div className="stat-grid">
             <StatTile label="Leads asignados" value={formatNumber(totals.leadsAsignados)} tone="accent" />
-            <StatTile label="Activos" value={formatNumber(totals.leadsActivos)} tone="neutral" />
+            <StatTile
+              label="Activos"
+              value={formatNumber(totals.leadsActivos)}
+              sub={`${formatPercent(totals.pctActivosSobreLeads)} sobre leads`}
+              tone="neutral"
+            />
             <StatTile label="Perdidos" value={formatNumber(totals.leadsPerdidos)} tone="critical" />
             <StatTile
               label="Ganados"

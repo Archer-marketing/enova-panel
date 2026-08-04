@@ -12,6 +12,7 @@ export function MetricsTable({ rows, totals, dimensionLabel }: { rows: FunnelRow
             <th>{dimensionLabel}</th>
             <th>Leads asignados</th>
             <th>Activos</th>
+            <th>% activos/leads</th>
             <th>Perdidos</th>
             <th>Ganados</th>
             <th>Monto ganado</th>
@@ -38,6 +39,7 @@ export function MetricsTable({ rows, totals, dimensionLabel }: { rows: FunnelRow
               <td>{r.dimensionValue}</td>
               <td>{formatNumber(r.leadsAsignados)}</td>
               <td>{formatNumber(r.leadsActivos)}</td>
+              <td>{formatPercent(r.pctActivosSobreLeads)}</td>
               <td>{formatNumber(r.leadsPerdidos)}</td>
               <td>{formatNumber(r.leadsGanados)}</td>
               <td>{formatCurrency(r.montoGanado)}</td>

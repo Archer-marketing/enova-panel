@@ -59,6 +59,7 @@ function emptyRow(dimensionValue: string): FunnelRow {
     dimensionValue,
     leadsAsignados: 0,
     leadsActivos: 0,
+    pctActivosSobreLeads: 0,
     leadsPerdidos: 0,
     leadsGanados: 0,
     montoGanado: 0,
@@ -165,6 +166,7 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
     row.leadsGanados = row.cierres;
     row.montoGanado = row.valorCierre;
 
+    row.pctActivosSobreLeads = pct(row.leadsActivos, row.leadsAsignados);
     row.pctAgendaSobreLeads = pct(row.citasAgendadas, row.leadsAsignados);
     row.pctAsistenciaSobreAgenda = pct(row.citasAsistidas, row.citasAgendadas);
     row.pctCotizacionesSobreLeads = pct(row.cotizaciones, row.leadsAsignados);
@@ -214,6 +216,7 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
   totals.valorCotizado = totalValorCotizado;
   totals.cierres = rows.reduce((s, r) => s + r.cierres, 0);
   totals.valorCierre = totalValorCierre;
+  totals.pctActivosSobreLeads = pct(totals.leadsActivos, totals.leadsAsignados);
   totals.pctAgendaSobreLeads = pct(totals.citasAgendadas, totals.leadsAsignados);
   totals.pctAsistenciaSobreAgenda = pct(totals.citasAsistidas, totals.citasAgendadas);
   totals.pctCotizacionesSobreLeads = pct(totals.cotizaciones, totals.leadsAsignados);
