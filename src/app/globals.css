@@ -237,3 +237,36 @@ table.report-table tbody tr:last-child {
   font-size: 13px;
   padding: 24px 0;
 }
+
+.filter-actions {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn {
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--text-primary);
+  color: var(--page-plane);
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.last-updated {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}

@@ -34,6 +34,8 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
   const [report, setReport] = useState<FunnelReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   useEffect(() => {
     fetch("/api/reports/filters")
@@ -66,11 +68,19 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
         if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
         return r.json();
       })
-      .then(setReport)
+      .then((data) => {
+        setReport(data);
+        setLastUpdated(new Date());
+      })
       .catch((e) => setError(e.message ?? "Error al cargar el reporte"))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, from, to, selectedAsesores, dimension, campaignFilter, adsetFilter, selectedValues]);
+  }, [mode, from, to, selectedAsesores, dimension, campaignFilter, adsetFilter, selectedValues, refreshTick]);
+
+  function handleRefresh() {
+    setRange((r) => ({ ...r, to: defaultDateRange().to }));
+    setRefreshTick((t) => t + 1);
+  }
 
   const valueOptions = useMemo(() => {
     if (!filters) return [];
@@ -164,6 +174,17 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
             </div>
           </>
         )}
+
+        <div className="filter-field filter-actions">
+          <button type="button" className="btn" onClick={handleRefresh} disabled={loading}>
+            {loading ? "Actualizando…" : "Actualizar"}
+          </button>
+          {lastUpdated ? (
+            <span className="last-updated">
+              Actualizado {lastUpdated.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {error ? (
