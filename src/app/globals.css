@@ -164,23 +164,16 @@ a {
 }
 
 /*
-  The logo artwork has near-white wordmark text, meant to sit on a dark
-  ground — it disappears on the light theme's white nav. Rather than
-  recolor the brand asset, give it a fixed dark plate that doesn't follow
-  the site theme, so it reads the same in both.
+  This crop of the brand lockup ships with its own dark-purple background
+  baked in (the source PNG the user provided), so — unlike the transparent
+  AVIF wordmark, which was near-invisible on the light theme's white nav —
+  it reads the same in both themes without any extra plate behind it.
 */
-.nav-logo-plate {
-  display: flex;
-  align-items: center;
-  background: #17150f;
-  border-radius: var(--radius-sm);
-  padding: 5px 10px;
-}
-
 .nav-logo {
   display: block;
-  height: 28px;
+  height: 34px;
   width: auto;
+  border-radius: var(--radius-sm);
 }
 
 .nav-links {
