@@ -125,9 +125,9 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [700, 500],
-      "notes": "Decides whether to loop back for another page, based on Kommo's own _links.next (per their documented pagination recipe).",
+      "notes": "Decides whether to loop back for another page, based on Kommo's own _links.next (per their documented pagination recipe). The next page number is parsed out of that link's own ?page= query param — Kommo's response has no _page field, so guessing currentPage+1 got stuck re-requesting page 2 forever once the account passed 500 leads (2 pages of 250).",
       "parameters": {
-        "jsCode": "const response = $input.first().json;\nconst hasNext = !!response._links?.next?.href;\nconst currentPage = response._page ?? 1;\nreturn [{ json: { route: hasNext ? 'loop' : 'done', page: currentPage + 1 } }];\n"
+        "jsCode": "const response = $input.first().json;\nconst nextHref = response._links?.next?.href;\nlet nextPage = null;\nif (nextHref) {\n  try {\n    nextPage = Number(new URL(nextHref).searchParams.get('page'));\n  } catch (e) {\n    nextPage = null;\n  }\n}\nconst hasNext = Number.isFinite(nextPage) && nextPage > 0;\nreturn [{ json: { route: hasNext ? 'loop' : 'done', page: hasNext ? nextPage : undefined } }];\n"
       }
     },
     {
