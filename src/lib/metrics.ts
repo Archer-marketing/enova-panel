@@ -92,6 +92,10 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
   const { from, to } = filters.dateRange;
 
   // $from/$to are appended after the structural params for every query below.
+  // `to` is a plain YYYY-MM-DD from the date picker, which Postgres casts to
+  // that day's midnight — comparing with BETWEEN would exclude everything
+  // that happened later that same day. Use the start of the next day as an
+  // exclusive upper bound instead so "Hasta: hoy" includes all of today.
   const fromIdx = structural.params.length + 1;
   const toIdx = structural.params.length + 2;
   const dateParams = [...structural.params, from, to];
@@ -100,15 +104,15 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
     SELECT
       ${dim.key} AS dimension_key,
       ${dim.label} AS dimension_value,
-      count(*) FILTER (WHERE created_at BETWEEN $${fromIdx} AND $${toIdx}) AS leads_asignados,
-      count(*) FILTER (WHERE created_at BETWEEN $${fromIdx} AND $${toIdx} AND NOT is_won AND NOT is_lost) AS leads_activos,
-      count(*) FILTER (WHERE closed_at BETWEEN $${fromIdx} AND $${toIdx} AND is_lost) AS leads_perdidos,
-      count(*) FILTER (WHERE closed_at BETWEEN $${fromIdx} AND $${toIdx} AND is_won) AS leads_ganados,
-      coalesce(sum(price) FILTER (WHERE closed_at BETWEEN $${fromIdx} AND $${toIdx} AND is_won), 0) AS monto_ganado,
-      count(*) FILTER (WHERE fecha_agenda BETWEEN $${fromIdx} AND $${toIdx}) AS citas_agendadas,
-      count(*) FILTER (WHERE fecha_cita_asistida BETWEEN $${fromIdx} AND $${toIdx}) AS citas_asistidas,
-      count(*) FILTER (WHERE fecha_cotizacion BETWEEN $${fromIdx} AND $${toIdx}) AS cotizaciones,
-      coalesce(sum(price) FILTER (WHERE fecha_cotizacion BETWEEN $${fromIdx} AND $${toIdx}), 0) AS valor_cotizado
+      count(*) FILTER (WHERE created_at >= $${fromIdx} AND created_at < $${toIdx}::date + 1) AS leads_asignados,
+      count(*) FILTER (WHERE created_at >= $${fromIdx} AND created_at < $${toIdx}::date + 1 AND NOT is_won AND NOT is_lost) AS leads_activos,
+      count(*) FILTER (WHERE closed_at >= $${fromIdx} AND closed_at < $${toIdx}::date + 1 AND is_lost) AS leads_perdidos,
+      count(*) FILTER (WHERE closed_at >= $${fromIdx} AND closed_at < $${toIdx}::date + 1 AND is_won) AS leads_ganados,
+      coalesce(sum(price) FILTER (WHERE closed_at >= $${fromIdx} AND closed_at < $${toIdx}::date + 1 AND is_won), 0) AS monto_ganado,
+      count(*) FILTER (WHERE fecha_agenda >= $${fromIdx} AND fecha_agenda < $${toIdx}::date + 1) AS citas_agendadas,
+      count(*) FILTER (WHERE fecha_cita_asistida >= $${fromIdx} AND fecha_cita_asistida < $${toIdx}::date + 1) AS citas_asistidas,
+      count(*) FILTER (WHERE fecha_cotizacion >= $${fromIdx} AND fecha_cotizacion < $${toIdx}::date + 1) AS cotizaciones,
+      coalesce(sum(price) FILTER (WHERE fecha_cotizacion >= $${fromIdx} AND fecha_cotizacion < $${toIdx}::date + 1), 0) AS valor_cotizado
     FROM kommo_leads
     ${structural.clause}
     GROUP BY ${dim.groupBy}
@@ -122,7 +126,7 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
       count(*) AS count
     FROM kommo_leads l
     LEFT JOIN kommo_statuses s ON s.pipeline_id = l.pipeline_id AND s.status_id = l.status_id
-    ${structural.clause ? `${structural.clause} AND` : "WHERE"} created_at BETWEEN $${fromIdx} AND $${toIdx}
+    ${structural.clause ? `${structural.clause} AND` : "WHERE"} created_at >= $${fromIdx} AND created_at < $${toIdx}::date + 1
     GROUP BY dimension_key, s.status_name
   `;
 
@@ -133,7 +137,7 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
       count(*) AS count,
       coalesce(sum(price), 0) AS amount
     FROM kommo_leads
-    ${structural.clause ? `${structural.clause} AND` : "WHERE"} is_lost AND closed_at BETWEEN $${fromIdx} AND $${toIdx}
+    ${structural.clause ? `${structural.clause} AND` : "WHERE"} is_lost AND closed_at >= $${fromIdx} AND closed_at < $${toIdx}::date + 1
     GROUP BY dimension_key, loss_reason_name
   `;
 
