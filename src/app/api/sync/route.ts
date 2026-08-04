@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
-// Triggers the n8n "Kommo - Sync Full" workflow via its manual-run webhook
-// and waits for it to finish (the webhook's responseMode is "lastNode"),
-// so the dashboard can be sure Postgres is caught up with Kommo before
-// re-reading the report.
+// Triggers the n8n "Kommo - Sync Full" workflow via its manual-run webhook.
+// The webhook's responseMode is "onReceived", so n8n acks within
+// milliseconds and keeps syncing in the background — we only need a short
+// timeout here to confirm the trigger reached n8n, not the whole sync.
 export async function POST() {
   const url = process.env.N8N_SYNC_WEBHOOK_URL;
   if (!url) {
@@ -14,7 +14,7 @@ export async function POST() {
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120_000);
+  const timeout = setTimeout(() => controller.abort(), 15_000);
 
   try {
     const res = await fetch(url, { method: "GET", signal: controller.signal });

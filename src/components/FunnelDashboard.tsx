@@ -85,9 +85,16 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
     try {
       const res = await fetch("/api/sync", { method: "POST" });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) setSyncError(data.error ?? "No se pudo sincronizar con Kommo.");
+      if (!res.ok) {
+        setSyncError(data.error ?? "No se pudo disparar el sync en n8n.");
+      } else {
+        // The n8n webhook acks immediately and keeps syncing in the
+        // background; give it a moment to finish writing to Postgres
+        // before we re-read the report.
+        await new Promise((resolve) => setTimeout(resolve, 20_000));
+      }
     } catch {
-      setSyncError("No se pudo sincronizar con Kommo.");
+      setSyncError("No se pudo disparar el sync en n8n.");
     } finally {
       setSyncing(false);
     }

@@ -90,12 +90,18 @@ Next.js dashboard ──(botón "Actualizar", POST /api/sync)──▶ n8n "komm
 - El dashboard lee Postgres para armar los reportes. El botón
   **Actualizar** es la única acción que escribe fuera de Postgres: llama a
   `POST /api/sync`, que dispara el webhook manual
-  (`kommo-sync-full-manual`) del workflow `kommo-sync-full` en n8n y
-  espera a que termine (ese webhook responde `lastNode`, o sea al
-  finalizar el workflow) antes de volver a leer Postgres. Requiere
+  (`kommo-sync-full-manual`) del workflow `kommo-sync-full` en n8n. Ese
+  webhook responde `onReceived` (ack inmediato; el sync sigue corriendo en
+  background en n8n) — así el dashboard no depende de mantener una
+  conexión HTTP abierta durante los ~15-25s que tarda el sync completo,
+  algo que en producción se cortaba por un timeout intermedio (proxy de
+  EasyPanel) aunque el workflow terminaba bien en n8n. El botón espera
+  ~20s de su lado tras el ack antes de volver a leer Postgres. Requiere
   `N8N_SYNC_WEBHOOK_URL` configurada en el servidor del dashboard (ver
-  `.env.example`); si falta o falla, el botón muestra el error pero igual
-  refresca con lo que ya haya en Postgres.
+  `.env.example`) **y** que el nodo webhook del workflow en tu instancia
+  de n8n tenga "Respond" = "Immediately" (no "When Last Node Finishes");
+  si falta la env var o el trigger falla, el botón muestra el error pero
+  igual refresca con lo que ya haya en Postgres.
 
 ## Semántica de fechas (importante)
 

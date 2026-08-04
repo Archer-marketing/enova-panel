@@ -21,9 +21,9 @@
       "parameters": {
         "path": "kommo-sync-full-manual",
         "httpMethod": "GET",
-        "responseMode": "lastNode"
+        "responseMode": "onReceived"
       },
-      "notes": "Call this webhook once manually for the initial historical backfill, no need to wait for the hourly schedule."
+      "notes": "Manual/on-demand trigger for the full sync (used by the dashboard's Actualizar button). Responds immediately on receipt so the caller isn't left holding an HTTP connection open for the whole sync (~15-25s) — the sync keeps running in the background regardless of whether anything is still listening for the response."
     },
     {
       "id": "getUsers",
