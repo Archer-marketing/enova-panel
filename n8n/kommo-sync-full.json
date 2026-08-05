@@ -82,7 +82,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [260, 390],
-      "notes": "Attach the Kommo Header Auth credential after import. Uses n8n's built-in HTTP Request pagination (page = $pageCount + 1, one request every 350ms) instead of a manual Code-node loop. The manual loop parsed Kommo's _links.next.href to decide whether to keep going, but that stayed stuck after page 1 in production — the sync never got past the first 250 leads. Built-in pagination stops on 'response is empty', matching Kommo's documented behavior of returning nothing once you page past the last lead, so it doesn't depend on _links being well-formed.",
+      "notes": "Attach the Kommo Header Auth credential after import. Single page per call, looped manually below via the graph cycle (More pages? -> back to this node). page is derived from $runIndex (this node's own execution count within the run), so it self-increments across loop iterations without needing to thread a page value through the loop's data. n8n's built-in HTTP Request pagination was tried and crashed ('data argument must be of type string or Buffer') on the empty/no-body response Kommo returns once you page past the last lead — a known issue with that feature — so this avoids it entirely by never making that trailing request: Check next page stops as soon as a page comes back with fewer than 250 leads.",
       "parameters": {
         "url": "https://infoenovapanelessolarescom.kommo.com/api/v4/leads",
         "authentication": "genericCredentialType",
@@ -91,48 +91,64 @@
         "queryParameters": {
           "parameters": [
             { "name": "with", "value": "custom_fields_values" },
-            { "name": "limit", "value": "250" }
+            { "name": "limit", "value": "250" },
+            { "name": "page", "value": "={{ $runIndex + 1 }}" }
           ]
         },
-        "options": {
-          "response": { "response": { "responseFormat": "json" } },
-          "pagination": {
-            "pagination": {
-              "paginationMode": "updateAParameterInEachRequest",
-              "parameters": {
-                "parameters": [{ "name": "page", "value": "={{ $pageCount + 1 }}" }]
-              },
-              "paginationCompleteWhen": "responseIsEmpty",
-              "limitPagesFetched": false,
-              "requestInterval": 350
-            }
-          }
-        }
+        "options": { "response": { "response": { "responseFormat": "json" } } }
       },
       "credentials": { "httpHeaderAuth": { "id": "SzwL0AS7rZs6OaFj", "name": "Kommo API" } }
     },
     {
-      "id": "splitOutLeads",
-      "name": "Split leads",
-      "type": "n8n-nodes-base.splitOut",
-      "typeVersion": 1,
+      "id": "waitBetweenPages",
+      "name": "Wait 350ms",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
       "position": [480, 390],
-      "notes": "Built-in pagination emits one item per page fetched (each with its own _embedded.leads array). This flattens every page's leads into one item per lead before transforming.",
-      "parameters": {
-        "fieldToSplitOut": "_embedded.leads",
-        "options": {}
-      }
+      "notes": "Paces page fetches at ~3 req/s, well under Kommo's 7 req/s cap.",
+      "parameters": { "amount": 0.35, "unit": "seconds" }
     },
     {
       "id": "transformPage",
       "name": "Transform page",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [700, 390],
-      "notes": "Field IDs below are specific to this Kommo account. agenda/cita_asistida/cotizacion/cierre are date_time custom fields; campaign/adset/ad reused from existing fields. Runs once per lead.",
+      "position": [700, 280],
+      "notes": "Field IDs below are specific to this Kommo account. agenda/cita_asistida/cotizacion/cierre are date_time custom fields; campaign/adset/ad reused from existing fields. Runs once per page.",
       "parameters": {
-        "mode": "runOnceForEachItem",
-        "jsCode": "const fieldMap = {\n  agenda: 3028198,\n  cita_asistida: 3028076,\n  cotizacion: 3028078,\n  cierre: 3028200,\n  campaign: 2972918,\n  adset: 2972920,\n  ad: 2972924,\n};\n\nconst users = $('Get Users').first().json._embedded?.users ?? [];\nconst userNameById = new Map(users.map((u) => [u.id, u.name]));\n\nconst pipelines = $('Get Pipelines').first().json._embedded?.pipelines ?? [];\nconst statusType = new Map();\nfor (const p of pipelines) {\n  for (const s of p._embedded?.statuses ?? []) {\n    let type = 'open';\n    if (s.id === 142) type = 'won';\n    if (s.id === 143) type = 'lost';\n    statusType.set(s.id, type);\n  }\n}\n\nconst lossReasons = $('Get Loss Reasons').first().json._embedded?.loss_reasons ?? [];\nconst lossReasonById = new Map(lossReasons.map((r) => [r.id, r.name]));\n\nconst toIso = (unixSeconds) => (unixSeconds ? new Date(unixSeconds * 1000).toISOString() : null);\nfunction extractCustomField(lead, fieldId) {\n  const cf = (lead.custom_fields_values || []).find((f) => f.field_id === fieldId);\n  return cf?.values?.[0]?.value ?? null;\n}\nfunction extractCustomFieldDate(lead, fieldId) {\n  const raw = extractCustomField(lead, fieldId);\n  const n = Number(raw);\n  return raw != null && Number.isFinite(n) ? toIso(n) : null;\n}\n\nconst lead = $json;\nconst type = statusType.get(lead.status_id) ?? 'open';\n\nreturn {\n  json: {\n    lead_id: lead.id,\n    name: lead.name,\n    price: lead.price ?? 0,\n    pipeline_id: lead.pipeline_id,\n    status_id: lead.status_id,\n    responsible_user_id: lead.responsible_user_id,\n    responsible_user_name: userNameById.get(lead.responsible_user_id) ?? null,\n    created_at: toIso(lead.created_at),\n    updated_at: toIso(lead.updated_at),\n    closed_at: toIso(lead.closed_at),\n    is_won: type === 'won',\n    is_lost: type === 'lost',\n    loss_reason_id: lead.loss_reason_id ?? null,\n    loss_reason_name: lead.loss_reason_id ? (lossReasonById.get(lead.loss_reason_id) ?? null) : null,\n    campaign: extractCustomField(lead, fieldMap.campaign),\n    adset: extractCustomField(lead, fieldMap.adset),\n    ad: extractCustomField(lead, fieldMap.ad),\n    fecha_agenda: extractCustomFieldDate(lead, fieldMap.agenda),\n    fecha_cita_asistida: extractCustomFieldDate(lead, fieldMap.cita_asistida),\n    fecha_cotizacion: extractCustomFieldDate(lead, fieldMap.cotizacion),\n    fecha_cierre: extractCustomFieldDate(lead, fieldMap.cierre),\n  },\n};\n"
+        "jsCode": "const fieldMap = {\n  agenda: 3028198,\n  cita_asistida: 3028076,\n  cotizacion: 3028078,\n  cierre: 3028200,\n  campaign: 2972918,\n  adset: 2972920,\n  ad: 2972924,\n};\n\nconst users = $('Get Users').first().json._embedded?.users ?? [];\nconst userNameById = new Map(users.map((u) => [u.id, u.name]));\n\nconst pipelines = $('Get Pipelines').first().json._embedded?.pipelines ?? [];\nconst statusType = new Map();\nfor (const p of pipelines) {\n  for (const s of p._embedded?.statuses ?? []) {\n    let type = 'open';\n    if (s.id === 142) type = 'won';\n    if (s.id === 143) type = 'lost';\n    statusType.set(s.id, type);\n  }\n}\n\nconst lossReasons = $('Get Loss Reasons').first().json._embedded?.loss_reasons ?? [];\nconst lossReasonById = new Map(lossReasons.map((r) => [r.id, r.name]));\n\nconst toIso = (unixSeconds) => (unixSeconds ? new Date(unixSeconds * 1000).toISOString() : null);\nfunction extractCustomField(lead, fieldId) {\n  const cf = (lead.custom_fields_values || []).find((f) => f.field_id === fieldId);\n  return cf?.values?.[0]?.value ?? null;\n}\nfunction extractCustomFieldDate(lead, fieldId) {\n  const raw = extractCustomField(lead, fieldId);\n  const n = Number(raw);\n  return raw != null && Number.isFinite(n) ? toIso(n) : null;\n}\n\nconst leads = $input.first().json._embedded?.leads ?? [];\n\nreturn leads.map((lead) => {\n  const type = statusType.get(lead.status_id) ?? 'open';\n  return {\n    json: {\n      lead_id: lead.id,\n      name: lead.name,\n      price: lead.price ?? 0,\n      pipeline_id: lead.pipeline_id,\n      status_id: lead.status_id,\n      responsible_user_id: lead.responsible_user_id,\n      responsible_user_name: userNameById.get(lead.responsible_user_id) ?? null,\n      created_at: toIso(lead.created_at),\n      updated_at: toIso(lead.updated_at),\n      closed_at: toIso(lead.closed_at),\n      is_won: type === 'won',\n      is_lost: type === 'lost',\n      loss_reason_id: lead.loss_reason_id ?? null,\n      loss_reason_name: lead.loss_reason_id ? (lossReasonById.get(lead.loss_reason_id) ?? null) : null,\n      campaign: extractCustomField(lead, fieldMap.campaign),\n      adset: extractCustomField(lead, fieldMap.adset),\n      ad: extractCustomField(lead, fieldMap.ad),\n      fecha_agenda: extractCustomFieldDate(lead, fieldMap.agenda),\n      fecha_cita_asistida: extractCustomFieldDate(lead, fieldMap.cita_asistida),\n      fecha_cotizacion: extractCustomFieldDate(lead, fieldMap.cotizacion),\n      fecha_cierre: extractCustomFieldDate(lead, fieldMap.cierre),\n    },\n  };\n});\n"
+      }
+    },
+    {
+      "id": "checkNextPage",
+      "name": "Check next page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 500],
+      "notes": "Stops as soon as a page comes back with fewer than 250 (the requested limit) leads — that's necessarily the last page, so we never issue a trailing request past the end of the data (which is what crashed the built-in-pagination version). Requires no page-number bookkeeping: Fetch Leads Page derives its own page from $runIndex.",
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst leadsCount = response._embedded?.leads?.length ?? 0;\nconst hasNext = leadsCount === 250;\nreturn [{ json: { route: hasNext ? 'loop' : 'done' } }];\n"
+      }
+    },
+    {
+      "id": "morePages",
+      "name": "More pages?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [920, 500],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "loop",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
       }
     },
     {
@@ -220,9 +236,21 @@
     },
     "Get Pipelines": { "main": [[{ "node": "Flatten statuses", "type": "main", "index": 0 }]] },
     "Get Loss Reasons": { "main": [[{ "node": "Flatten loss reasons", "type": "main", "index": 0 }]] },
-    "Fetch Leads Page": { "main": [[{ "node": "Split leads", "type": "main", "index": 0 }]] },
-    "Split leads": { "main": [[{ "node": "Transform page", "type": "main", "index": 0 }]] },
+    "Fetch Leads Page": { "main": [[{ "node": "Wait 350ms", "type": "main", "index": 0 }]] },
+    "Wait 350ms": {
+      "main": [[
+        { "node": "Transform page", "type": "main", "index": 0 },
+        { "node": "Check next page", "type": "main", "index": 0 }
+      ]]
+    },
     "Transform page": { "main": [[{ "node": "Upsert kommo_leads", "type": "main", "index": 0 }]] },
+    "Check next page": { "main": [[{ "node": "More pages?", "type": "main", "index": 0 }]] },
+    "More pages?": {
+      "main": [
+        [{ "node": "Fetch Leads Page", "type": "main", "index": 0 }],
+        []
+      ]
+    },
     "Flatten statuses": { "main": [[{ "node": "Upsert kommo_statuses", "type": "main", "index": 0 }]] },
     "Flatten loss reasons": { "main": [[{ "node": "Upsert kommo_loss_reasons", "type": "main", "index": 0 }]] }
   },
