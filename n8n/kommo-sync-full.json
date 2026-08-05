@@ -269,6 +269,28 @@
         }
       },
       "credentials": { "postgres": { "id": "VfzvqXcIPcMEj12e", "name": "Postgres - panel (reportes-db)" } }
+    },
+    {
+      "id": "waitBeforeDelete",
+      "name": "Wait before delete",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1140, 500],
+      "notes": "'More pages?' (false) and the last page's 'Upsert kommo_leads' both fire off the same 'Wait 350ms'/'Check next page' split, so there's no strict guarantee the last page finished writing before this branch reaches Delete stale leads. A single Postgres upsert of up to 250 rows finishes in well under this, so this is a cheap insurance margin against deleting a lead that was in fact still there, just not written yet.",
+      "parameters": { "amount": 5, "unit": "seconds" }
+    },
+    {
+      "id": "deleteStaleLeads",
+      "name": "Delete stale leads",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1360, 500],
+      "notes": "Runs once, only after the full-pagination loop reports no more pages — i.e. only on a real full sync (Every hour / Manual run backfill), never after the lightweight won/lost-today branch, which only ever sees a subset of leads. Every lead Kommo still has was just re-upserted (fresh synced_at) somewhere in this same run, which takes well under a minute even at several thousand leads; anything with an older synced_at wasn't returned by Kommo anymore, i.e. it was deleted (or otherwise dropped from the account) there. The 15-minute window is a generous safety margin — if the full sync ever grows to take longer than that, widen it.",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM kommo_leads WHERE synced_at < now() - interval '15 minutes';"
+      },
+      "credentials": { "postgres": { "id": "VfzvqXcIPcMEj12e", "name": "Postgres - panel (reportes-db)" } }
     }
   ],
   "connections": {
@@ -312,9 +334,10 @@
     "More pages?": {
       "main": [
         [{ "node": "Fetch Leads Page", "type": "main", "index": 0 }],
-        []
+        [{ "node": "Wait before delete", "type": "main", "index": 0 }]
       ]
     },
+    "Wait before delete": { "main": [[{ "node": "Delete stale leads", "type": "main", "index": 0 }]] },
     "Flatten statuses": { "main": [[{ "node": "Upsert kommo_statuses", "type": "main", "index": 0 }]] },
     "Flatten loss reasons": { "main": [[{ "node": "Upsert kommo_loss_reasons", "type": "main", "index": 0 }]] }
   },
