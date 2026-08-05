@@ -1,7 +1,18 @@
 import type { FunnelRow } from "@/lib/types";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 
-export function MetricsTable({ rows, totals, dimensionLabel }: { rows: FunnelRow[]; totals: FunnelRow; dimensionLabel: string }) {
+export function MetricsTable({
+  rows,
+  totals,
+  dimensionLabel,
+  onRowClick,
+}: {
+  rows: FunnelRow[];
+  totals: FunnelRow;
+  dimensionLabel: string;
+  /** When set, every non-total row becomes clickable (drill-down). */
+  onRowClick?: (dimensionValue: string) => void;
+}) {
   const allRows = [...rows, totals];
 
   return (
@@ -12,6 +23,7 @@ export function MetricsTable({ rows, totals, dimensionLabel }: { rows: FunnelRow
             <th>{dimensionLabel}</th>
             <th>Leads asignados</th>
             <th>Activos</th>
+            <th>% activos/leads</th>
             <th>Perdidos</th>
             <th>Ganados</th>
             <th>Monto ganado</th>
@@ -24,6 +36,8 @@ export function MetricsTable({ rows, totals, dimensionLabel }: { rows: FunnelRow
             <th>Promedio cotizado</th>
             <th>% cotiz/leads</th>
             <th>% participación cotiz</th>
+            <th>Por cerrar</th>
+            <th>% por cerrar/cotiz</th>
             <th>Cierres</th>
             <th>Valor cierre</th>
             <th>Promedio cierre</th>
@@ -33,11 +47,21 @@ export function MetricsTable({ rows, totals, dimensionLabel }: { rows: FunnelRow
           </tr>
         </thead>
         <tbody>
-          {allRows.map((r) => (
-            <tr key={r.dimensionValue}>
-              <td>{r.dimensionValue}</td>
+          {allRows.map((r) => {
+            const clickable = onRowClick && r !== totals;
+            return (
+            <tr
+              key={r.dimensionValue}
+              className={clickable ? "row-clickable" : undefined}
+              onClick={clickable ? () => onRowClick(r.dimensionValue) : undefined}
+            >
+              <td>
+                {r.dimensionValue}
+                {clickable ? <span className="row-drill-hint">›</span> : null}
+              </td>
               <td>{formatNumber(r.leadsAsignados)}</td>
               <td>{formatNumber(r.leadsActivos)}</td>
+              <td>{formatPercent(r.pctActivosSobreLeads)}</td>
               <td>{formatNumber(r.leadsPerdidos)}</td>
               <td>{formatNumber(r.leadsGanados)}</td>
               <td>{formatCurrency(r.montoGanado)}</td>
@@ -50,6 +74,8 @@ export function MetricsTable({ rows, totals, dimensionLabel }: { rows: FunnelRow
               <td>{formatCurrency(r.promedioCotizado)}</td>
               <td>{formatPercent(r.pctCotizacionesSobreLeads)}</td>
               <td>{formatPercent(r.pctParticipacionCotizado)}</td>
+              <td>{formatNumber(r.porCerrar)}</td>
+              <td>{formatPercent(r.pctPorCerrarSobreCotizacion)}</td>
               <td>{formatNumber(r.cierres)}</td>
               <td>{formatCurrency(r.valorCierre)}</td>
               <td>{formatCurrency(r.promedioCierre)}</td>
@@ -57,7 +83,8 @@ export function MetricsTable({ rows, totals, dimensionLabel }: { rows: FunnelRow
               <td>{formatPercent(r.pctCierreSobreCotizacion)}</td>
               <td>{formatPercent(r.pctCierreSobreAsistencia)}</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

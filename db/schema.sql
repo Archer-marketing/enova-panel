@@ -32,9 +32,15 @@ create table if not exists kommo_leads (
   fecha_agenda            timestamptz,
   fecha_cita_asistida     timestamptz,
   fecha_cotizacion        timestamptz,
+  fecha_por_cerrar        timestamptz,
+  fecha_cierre            timestamptz,
 
   synced_at               timestamptz not null default now()
 );
+
+-- Idempotent for databases created before these columns existed.
+alter table kommo_leads add column if not exists fecha_cierre timestamptz;
+alter table kommo_leads add column if not exists fecha_por_cerrar timestamptz;
 
 -- Filter/aggregation indexes. Every report query filters by one of these
 -- date columns plus optionally responsible_user_id / campaign / adset / ad,
@@ -44,6 +50,8 @@ create index if not exists idx_kommo_leads_closed_at         on kommo_leads (clo
 create index if not exists idx_kommo_leads_fecha_agenda      on kommo_leads (fecha_agenda);
 create index if not exists idx_kommo_leads_fecha_asistida    on kommo_leads (fecha_cita_asistida);
 create index if not exists idx_kommo_leads_fecha_cotizacion  on kommo_leads (fecha_cotizacion);
+create index if not exists idx_kommo_leads_fecha_por_cerrar  on kommo_leads (fecha_por_cerrar);
+create index if not exists idx_kommo_leads_fecha_cierre      on kommo_leads (fecha_cierre);
 create index if not exists idx_kommo_leads_responsible_user  on kommo_leads (responsible_user_id);
 create index if not exists idx_kommo_leads_campaign          on kommo_leads (campaign);
 create index if not exists idx_kommo_leads_adset             on kommo_leads (adset);
@@ -71,7 +79,7 @@ create table if not exists kommo_loss_reasons (
 -- the mapping survives independent of the n8n workflow JSON and can be
 -- looked up (e.g. by a debugging query or a future re-run of the script).
 create table if not exists kommo_field_map (
-  field_key text primary key, -- 'agenda' | 'cita_asistida' | 'cotizacion' | 'campaign' | 'adset' | 'ad'
+  field_key text primary key, -- 'agenda' | 'cita_asistida' | 'cotizacion' | 'por_cerrar' | 'cierre' | 'campaign' | 'adset' | 'ad'
   field_id  bigint not null,
   field_name text
 );

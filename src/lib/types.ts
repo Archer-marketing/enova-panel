@@ -30,6 +30,7 @@ export type FunnelRow = {
   dimensionValue: string;
   leadsAsignados: number;
   leadsActivos: number;
+  pctActivosSobreLeads: number;
   leadsPerdidos: number;
   leadsGanados: number;
   montoGanado: number;
@@ -48,6 +49,9 @@ export type FunnelRow = {
   promedioCotizado: number;
   pctCotizacionesSobreLeads: number;
   pctParticipacionCotizado: number;
+
+  porCerrar: number;
+  pctPorCerrarSobreCotizacion: number;
 
   cierres: number;
   valorCierre: number;

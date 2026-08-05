@@ -59,6 +59,7 @@ function emptyRow(dimensionValue: string): FunnelRow {
     dimensionValue,
     leadsAsignados: 0,
     leadsActivos: 0,
+    pctActivosSobreLeads: 0,
     leadsPerdidos: 0,
     leadsGanados: 0,
     montoGanado: 0,
@@ -73,6 +74,8 @@ function emptyRow(dimensionValue: string): FunnelRow {
     promedioCotizado: 0,
     pctCotizacionesSobreLeads: 0,
     pctParticipacionCotizado: 0,
+    porCerrar: 0,
+    pctPorCerrarSobreCotizacion: 0,
     cierres: 0,
     valorCierre: 0,
     promedioCierre: 0,
@@ -92,6 +95,10 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
   const { from, to } = filters.dateRange;
 
   // $from/$to are appended after the structural params for every query below.
+  // `to` is a plain YYYY-MM-DD from the date picker, which Postgres casts to
+  // that day's midnight — comparing with BETWEEN would exclude everything
+  // that happened later that same day. Use the start of the next day as an
+  // exclusive upper bound instead so "Hasta: hoy" includes all of today.
   const fromIdx = structural.params.length + 1;
   const toIdx = structural.params.length + 2;
   const dateParams = [...structural.params, from, to];
@@ -100,15 +107,16 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
     SELECT
       ${dim.key} AS dimension_key,
       ${dim.label} AS dimension_value,
-      count(*) FILTER (WHERE created_at BETWEEN $${fromIdx} AND $${toIdx}) AS leads_asignados,
-      count(*) FILTER (WHERE created_at BETWEEN $${fromIdx} AND $${toIdx} AND NOT is_won AND NOT is_lost) AS leads_activos,
-      count(*) FILTER (WHERE closed_at BETWEEN $${fromIdx} AND $${toIdx} AND is_lost) AS leads_perdidos,
-      count(*) FILTER (WHERE closed_at BETWEEN $${fromIdx} AND $${toIdx} AND is_won) AS leads_ganados,
-      coalesce(sum(price) FILTER (WHERE closed_at BETWEEN $${fromIdx} AND $${toIdx} AND is_won), 0) AS monto_ganado,
-      count(*) FILTER (WHERE fecha_agenda BETWEEN $${fromIdx} AND $${toIdx}) AS citas_agendadas,
-      count(*) FILTER (WHERE fecha_cita_asistida BETWEEN $${fromIdx} AND $${toIdx}) AS citas_asistidas,
-      count(*) FILTER (WHERE fecha_cotizacion BETWEEN $${fromIdx} AND $${toIdx}) AS cotizaciones,
-      coalesce(sum(price) FILTER (WHERE fecha_cotizacion BETWEEN $${fromIdx} AND $${toIdx}), 0) AS valor_cotizado
+      count(*) FILTER (WHERE created_at >= $${fromIdx} AND created_at < $${toIdx}::date + 1) AS leads_asignados,
+      count(*) FILTER (WHERE created_at >= $${fromIdx} AND created_at < $${toIdx}::date + 1 AND NOT is_won AND NOT is_lost) AS leads_activos,
+      count(*) FILTER (WHERE closed_at >= $${fromIdx} AND closed_at < $${toIdx}::date + 1 AND is_lost) AS leads_perdidos,
+      count(*) FILTER (WHERE fecha_agenda >= $${fromIdx} AND fecha_agenda < $${toIdx}::date + 1) AS citas_agendadas,
+      count(*) FILTER (WHERE fecha_cita_asistida >= $${fromIdx} AND fecha_cita_asistida < $${toIdx}::date + 1) AS citas_asistidas,
+      count(*) FILTER (WHERE fecha_cotizacion >= $${fromIdx} AND fecha_cotizacion < $${toIdx}::date + 1) AS cotizaciones,
+      coalesce(sum(price) FILTER (WHERE fecha_cotizacion >= $${fromIdx} AND fecha_cotizacion < $${toIdx}::date + 1), 0) AS valor_cotizado,
+      count(*) FILTER (WHERE fecha_por_cerrar >= $${fromIdx} AND fecha_por_cerrar < $${toIdx}::date + 1) AS por_cerrar,
+      count(*) FILTER (WHERE fecha_cierre >= $${fromIdx} AND fecha_cierre < $${toIdx}::date + 1) AS cierres,
+      coalesce(sum(price) FILTER (WHERE fecha_cierre >= $${fromIdx} AND fecha_cierre < $${toIdx}::date + 1), 0) AS valor_cierre
     FROM kommo_leads
     ${structural.clause}
     GROUP BY ${dim.groupBy}
@@ -122,7 +130,7 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
       count(*) AS count
     FROM kommo_leads l
     LEFT JOIN kommo_statuses s ON s.pipeline_id = l.pipeline_id AND s.status_id = l.status_id
-    ${structural.clause ? `${structural.clause} AND` : "WHERE"} created_at BETWEEN $${fromIdx} AND $${toIdx}
+    ${structural.clause ? `${structural.clause} AND` : "WHERE"} created_at >= $${fromIdx} AND created_at < $${toIdx}::date + 1
     GROUP BY dimension_key, s.status_name
   `;
 
@@ -133,7 +141,7 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
       count(*) AS count,
       coalesce(sum(price), 0) AS amount
     FROM kommo_leads
-    ${structural.clause ? `${structural.clause} AND` : "WHERE"} is_lost AND closed_at BETWEEN $${fromIdx} AND $${toIdx}
+    ${structural.clause ? `${structural.clause} AND` : "WHERE"} is_lost AND closed_at >= $${fromIdx} AND closed_at < $${toIdx}::date + 1
     GROUP BY dimension_key, loss_reason_name
   `;
 
@@ -150,20 +158,24 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
     row.leadsAsignados = Number(r.leads_asignados);
     row.leadsActivos = Number(r.leads_activos);
     row.leadsPerdidos = Number(r.leads_perdidos);
-    row.leadsGanados = Number(r.leads_ganados);
-    row.montoGanado = Number(r.monto_ganado);
     row.citasAgendadas = Number(r.citas_agendadas);
     row.citasAsistidas = Number(r.citas_asistidas);
     row.cotizaciones = Number(r.cotizaciones);
     row.valorCotizado = Number(r.valor_cotizado);
+    row.porCerrar = Number(r.por_cerrar);
+    row.cierres = Number(r.cierres);
+    row.valorCierre = Number(r.valor_cierre);
+    // "Ganados" = "Cierres": ambos vienen de fecha_cierre, no del status
+    // interno de Kommo (a pedido del usuario).
+    row.leadsGanados = row.cierres;
+    row.montoGanado = row.valorCierre;
 
-    row.cierres = row.leadsGanados;
-    row.valorCierre = row.montoGanado;
-
+    row.pctActivosSobreLeads = pct(row.leadsActivos, row.leadsAsignados);
     row.pctAgendaSobreLeads = pct(row.citasAgendadas, row.leadsAsignados);
     row.pctAsistenciaSobreAgenda = pct(row.citasAsistidas, row.citasAgendadas);
     row.pctCotizacionesSobreLeads = pct(row.cotizaciones, row.leadsAsignados);
     row.promedioCotizado = pct(row.valorCotizado, row.cotizaciones);
+    row.pctPorCerrarSobreCotizacion = pct(row.porCerrar, row.cotizaciones);
     row.promedioCierre = pct(row.valorCierre, row.cierres);
     row.pctCierreSobreCotizacion = pct(row.cierres, row.cotizaciones);
     row.pctCierreSobreAsistencia = pct(row.cierres, row.citasAsistidas);
@@ -207,12 +219,15 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
   totals.citasAsistidas = rows.reduce((s, r) => s + r.citasAsistidas, 0);
   totals.cotizaciones = rows.reduce((s, r) => s + r.cotizaciones, 0);
   totals.valorCotizado = totalValorCotizado;
-  totals.cierres = totals.leadsGanados;
+  totals.porCerrar = rows.reduce((s, r) => s + r.porCerrar, 0);
+  totals.cierres = rows.reduce((s, r) => s + r.cierres, 0);
   totals.valorCierre = totalValorCierre;
+  totals.pctActivosSobreLeads = pct(totals.leadsActivos, totals.leadsAsignados);
   totals.pctAgendaSobreLeads = pct(totals.citasAgendadas, totals.leadsAsignados);
   totals.pctAsistenciaSobreAgenda = pct(totals.citasAsistidas, totals.citasAgendadas);
   totals.pctCotizacionesSobreLeads = pct(totals.cotizaciones, totals.leadsAsignados);
   totals.promedioCotizado = pct(totals.valorCotizado, totals.cotizaciones);
+  totals.pctPorCerrarSobreCotizacion = pct(totals.porCerrar, totals.cotizaciones);
   totals.promedioCierre = pct(totals.valorCierre, totals.cierres);
   totals.pctCierreSobreCotizacion = pct(totals.cierres, totals.cotizaciones);
   totals.pctCierreSobreAsistencia = pct(totals.cierres, totals.citasAsistidas);

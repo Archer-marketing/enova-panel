@@ -12,7 +12,7 @@ export function PipelineAndLoss({ pipeline, razonesPerdida }: { pipeline: Pipeli
     .map((r) => ({ label: r.reason, values: [r.count] }));
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+    <div className="pipeline-grid">
       <div className="card">
         <div className="section-title" style={{ marginTop: 0 }}>
           Pipeline general
@@ -29,7 +29,7 @@ export function PipelineAndLoss({ pipeline, razonesPerdida }: { pipeline: Pipeli
         </div>
         {lossRows.length ? (
           <>
-            <BarChart rows={lossRows} series={[{ name: "Leads perdidos", color: "var(--status-critical)" }]} formatValue={formatNumber} />
+            <BarChart rows={lossRows} series={[{ name: "Leads perdidos", color: "var(--critical)" }]} formatValue={formatNumber} />
             <table className="report-table" style={{ marginTop: 16 }}>
               <thead>
                 <tr>
