@@ -283,6 +283,12 @@ export function FunnelDashboard({ mode }: { mode: "asesores" | "campanas" }) {
               tone="warning"
             />
             <StatTile
+              label="Por cerrar"
+              value={formatNumber(totals.porCerrar)}
+              sub={`${formatPercent(totals.pctPorCerrarSobreCotizacion)} sobre coti`}
+              tone="warning"
+            />
+            <StatTile
               label="Cierres"
               value={formatNumber(totals.cierres)}
               sub={`${formatCurrency(totals.valorCierre)} · ${formatPercent(totals.pctCierreSobreCotizacion)} sobre coti`}

@@ -26,6 +26,60 @@
       "notes": "Manual/on-demand trigger for the full sync (used by the dashboard's Actualizar button). Responds immediately on receipt so the caller isn't left holding an HTTP connection open for the whole sync (~15-25s) — the sync keeps running in the background regardless of whether anything is still listening for the response."
     },
     {
+      "id": "wonLostTodayTrigger",
+      "name": "Every 15 min (won/lost today)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 620],
+      "notes": "Lightweight safety net alongside kommo-won-lost-webhook.json: polls only leads updated today and filtered to won/lost client-side, so it stays cheap (one request, no pagination) and closes the gap if the webhook ever misses an event or isn't firing, without waiting for the next hourly full sync.",
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 15 }] }
+      }
+    },
+    {
+      "id": "fetchWonLostToday",
+      "name": "Fetch Won/Lost Today",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 620],
+      "notes": "Attach the Kommo Header Auth credential after import. filter[updated_at][from] is midnight of the current day per the n8n server's own timezone — verify that matches the business's expected 'today' boundary. Single page (limit 250): a single day's worth of leads touched should stay well under that; if daily volume ever grows past it this would need the same paging pattern as Fetch Leads Page.",
+      "parameters": {
+        "url": "https://infoenovapanelessolarescom.kommo.com/api/v4/leads",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "with", "value": "custom_fields_values" },
+            { "name": "limit", "value": "250" },
+            { "name": "filter[updated_at][from]", "value": "={{ Math.floor($now.startOf('day').toSeconds()) }}" }
+          ]
+        },
+        "options": { "response": { "response": { "responseFormat": "json" } } }
+      },
+      "credentials": { "httpHeaderAuth": { "id": "SzwL0AS7rZs6OaFj", "name": "Kommo API" } }
+    },
+    {
+      "id": "classifyWonLostToday",
+      "name": "Classify won/lost today",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 620],
+      "notes": "142/143 are Kommo's fixed won/lost status ids, consistent across every pipeline in this account — no need to fetch pipelines here. Drops anything still open so this branch only ever writes closed leads, same as kommo-won-lost-webhook.json's 'Drop non won/lost'.",
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const fieldMap = {\n  agenda: 3028198,\n  cita_asistida: 3028076,\n  cotizacion: 3028078,\n  por_cerrar: 3028274,\n  cierre: 3028200,\n  campaign: 2972918,\n  adset: 2972920,\n  ad: 2972924,\n};\n\nconst lead = $json;\nconst isWon = lead.status_id === 142;\nconst isLost = lead.status_id === 143;\nif (!isWon && !isLost) {\n  return { json: { __skip: true } };\n}\n\nconst users = $('Get Users').first().json._embedded?.users ?? [];\nconst userNameById = new Map(users.map((u) => [u.id, u.name]));\nconst lossReasons = $('Get Loss Reasons').first().json._embedded?.loss_reasons ?? [];\nconst lossReasonById = new Map(lossReasons.map((r) => [r.id, r.name]));\n\nconst toIso = (unixSeconds) => (unixSeconds ? new Date(unixSeconds * 1000).toISOString() : null);\nfunction extractCustomField(l, fieldId) {\n  const cf = (l.custom_fields_values || []).find((f) => f.field_id === fieldId);\n  return cf?.values?.[0]?.value ?? null;\n}\nfunction extractCustomFieldDate(l, fieldId) {\n  const raw = extractCustomField(l, fieldId);\n  const n = Number(raw);\n  return raw != null && Number.isFinite(n) ? toIso(n) : null;\n}\n\nreturn {\n  json: {\n    lead_id: lead.id,\n    name: lead.name,\n    price: lead.price ?? 0,\n    pipeline_id: lead.pipeline_id,\n    status_id: lead.status_id,\n    responsible_user_id: lead.responsible_user_id,\n    responsible_user_name: userNameById.get(lead.responsible_user_id) ?? null,\n    created_at: toIso(lead.created_at),\n    updated_at: toIso(lead.updated_at),\n    closed_at: toIso(lead.closed_at),\n    is_won: isWon,\n    is_lost: isLost,\n    loss_reason_id: lead.loss_reason_id ?? null,\n    loss_reason_name: lead.loss_reason_id ? (lossReasonById.get(lead.loss_reason_id) ?? null) : null,\n    campaign: extractCustomField(lead, fieldMap.campaign),\n    adset: extractCustomField(lead, fieldMap.adset),\n    ad: extractCustomField(lead, fieldMap.ad),\n    fecha_agenda: extractCustomFieldDate(lead, fieldMap.agenda),\n    fecha_cita_asistida: extractCustomFieldDate(lead, fieldMap.cita_asistida),\n    fecha_cotizacion: extractCustomFieldDate(lead, fieldMap.cotizacion),\n    fecha_por_cerrar: extractCustomFieldDate(lead, fieldMap.por_cerrar),\n    fecha_cierre: extractCustomFieldDate(lead, fieldMap.cierre),\n  },\n};\n"
+      }
+    },
+    {
+      "id": "dropNonWonLostToday",
+      "name": "Drop non won/lost today",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 620],
+      "parameters": { "jsCode": "return $input.all().filter((i) => !i.json.__skip);" }
+    },
+    {
       "id": "getUsers",
       "name": "Get Users",
       "type": "n8n-nodes-base.httpRequest",
@@ -116,7 +170,7 @@
       "position": [700, 280],
       "notes": "Field IDs below are specific to this Kommo account. agenda/cita_asistida/cotizacion/cierre are date_time custom fields; campaign/adset/ad reused from existing fields. Runs once per page.",
       "parameters": {
-        "jsCode": "const fieldMap = {\n  agenda: 3028198,\n  cita_asistida: 3028076,\n  cotizacion: 3028078,\n  cierre: 3028200,\n  campaign: 2972918,\n  adset: 2972920,\n  ad: 2972924,\n};\n\nconst users = $('Get Users').first().json._embedded?.users ?? [];\nconst userNameById = new Map(users.map((u) => [u.id, u.name]));\n\nconst pipelines = $('Get Pipelines').first().json._embedded?.pipelines ?? [];\nconst statusType = new Map();\nfor (const p of pipelines) {\n  for (const s of p._embedded?.statuses ?? []) {\n    let type = 'open';\n    if (s.id === 142) type = 'won';\n    if (s.id === 143) type = 'lost';\n    statusType.set(s.id, type);\n  }\n}\n\nconst lossReasons = $('Get Loss Reasons').first().json._embedded?.loss_reasons ?? [];\nconst lossReasonById = new Map(lossReasons.map((r) => [r.id, r.name]));\n\nconst toIso = (unixSeconds) => (unixSeconds ? new Date(unixSeconds * 1000).toISOString() : null);\nfunction extractCustomField(lead, fieldId) {\n  const cf = (lead.custom_fields_values || []).find((f) => f.field_id === fieldId);\n  return cf?.values?.[0]?.value ?? null;\n}\nfunction extractCustomFieldDate(lead, fieldId) {\n  const raw = extractCustomField(lead, fieldId);\n  const n = Number(raw);\n  return raw != null && Number.isFinite(n) ? toIso(n) : null;\n}\n\nconst leads = $input.first().json._embedded?.leads ?? [];\n\nreturn leads.map((lead) => {\n  const type = statusType.get(lead.status_id) ?? 'open';\n  return {\n    json: {\n      lead_id: lead.id,\n      name: lead.name,\n      price: lead.price ?? 0,\n      pipeline_id: lead.pipeline_id,\n      status_id: lead.status_id,\n      responsible_user_id: lead.responsible_user_id,\n      responsible_user_name: userNameById.get(lead.responsible_user_id) ?? null,\n      created_at: toIso(lead.created_at),\n      updated_at: toIso(lead.updated_at),\n      closed_at: toIso(lead.closed_at),\n      is_won: type === 'won',\n      is_lost: type === 'lost',\n      loss_reason_id: lead.loss_reason_id ?? null,\n      loss_reason_name: lead.loss_reason_id ? (lossReasonById.get(lead.loss_reason_id) ?? null) : null,\n      campaign: extractCustomField(lead, fieldMap.campaign),\n      adset: extractCustomField(lead, fieldMap.adset),\n      ad: extractCustomField(lead, fieldMap.ad),\n      fecha_agenda: extractCustomFieldDate(lead, fieldMap.agenda),\n      fecha_cita_asistida: extractCustomFieldDate(lead, fieldMap.cita_asistida),\n      fecha_cotizacion: extractCustomFieldDate(lead, fieldMap.cotizacion),\n      fecha_cierre: extractCustomFieldDate(lead, fieldMap.cierre),\n    },\n  };\n});\n"
+        "jsCode": "const fieldMap = {\n  agenda: 3028198,\n  cita_asistida: 3028076,\n  cotizacion: 3028078,\n  por_cerrar: 3028274,\n  cierre: 3028200,\n  campaign: 2972918,\n  adset: 2972920,\n  ad: 2972924,\n};\n\nconst users = $('Get Users').first().json._embedded?.users ?? [];\nconst userNameById = new Map(users.map((u) => [u.id, u.name]));\n\nconst pipelines = $('Get Pipelines').first().json._embedded?.pipelines ?? [];\nconst statusType = new Map();\nfor (const p of pipelines) {\n  for (const s of p._embedded?.statuses ?? []) {\n    let type = 'open';\n    if (s.id === 142) type = 'won';\n    if (s.id === 143) type = 'lost';\n    statusType.set(s.id, type);\n  }\n}\n\nconst lossReasons = $('Get Loss Reasons').first().json._embedded?.loss_reasons ?? [];\nconst lossReasonById = new Map(lossReasons.map((r) => [r.id, r.name]));\n\nconst toIso = (unixSeconds) => (unixSeconds ? new Date(unixSeconds * 1000).toISOString() : null);\nfunction extractCustomField(lead, fieldId) {\n  const cf = (lead.custom_fields_values || []).find((f) => f.field_id === fieldId);\n  return cf?.values?.[0]?.value ?? null;\n}\nfunction extractCustomFieldDate(lead, fieldId) {\n  const raw = extractCustomField(lead, fieldId);\n  const n = Number(raw);\n  return raw != null && Number.isFinite(n) ? toIso(n) : null;\n}\n\nconst leads = $input.first().json._embedded?.leads ?? [];\n\nreturn leads.map((lead) => {\n  const type = statusType.get(lead.status_id) ?? 'open';\n  return {\n    json: {\n      lead_id: lead.id,\n      name: lead.name,\n      price: lead.price ?? 0,\n      pipeline_id: lead.pipeline_id,\n      status_id: lead.status_id,\n      responsible_user_id: lead.responsible_user_id,\n      responsible_user_name: userNameById.get(lead.responsible_user_id) ?? null,\n      created_at: toIso(lead.created_at),\n      updated_at: toIso(lead.updated_at),\n      closed_at: toIso(lead.closed_at),\n      is_won: type === 'won',\n      is_lost: type === 'lost',\n      loss_reason_id: lead.loss_reason_id ?? null,\n      loss_reason_name: lead.loss_reason_id ? (lossReasonById.get(lead.loss_reason_id) ?? null) : null,\n      campaign: extractCustomField(lead, fieldMap.campaign),\n      adset: extractCustomField(lead, fieldMap.adset),\n      ad: extractCustomField(lead, fieldMap.ad),\n      fecha_agenda: extractCustomFieldDate(lead, fieldMap.agenda),\n      fecha_cita_asistida: extractCustomFieldDate(lead, fieldMap.cita_asistida),\n      fecha_cotizacion: extractCustomFieldDate(lead, fieldMap.cotizacion),\n      fecha_por_cerrar: extractCustomFieldDate(lead, fieldMap.por_cerrar),\n      fecha_cierre: extractCustomFieldDate(lead, fieldMap.cierre),\n    },\n  };\n});\n"
       }
     },
     {
@@ -209,9 +263,9 @@
       "position": [920, 280],
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO kommo_leads (lead_id, name, price, pipeline_id, status_id, responsible_user_id, responsible_user_name, created_at, updated_at, closed_at, is_won, is_lost, loss_reason_id, loss_reason_name, campaign, adset, ad, fecha_agenda, fecha_cita_asistida, fecha_cotizacion, fecha_cierre, synced_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21, now()) ON CONFLICT (lead_id) DO UPDATE SET name=excluded.name, price=excluded.price, pipeline_id=excluded.pipeline_id, status_id=excluded.status_id, responsible_user_id=excluded.responsible_user_id, responsible_user_name=excluded.responsible_user_name, created_at=excluded.created_at, updated_at=excluded.updated_at, closed_at=excluded.closed_at, is_won=excluded.is_won, is_lost=excluded.is_lost, loss_reason_id=excluded.loss_reason_id, loss_reason_name=excluded.loss_reason_name, campaign=excluded.campaign, adset=excluded.adset, ad=excluded.ad, fecha_agenda=excluded.fecha_agenda, fecha_cita_asistida=excluded.fecha_cita_asistida, fecha_cotizacion=excluded.fecha_cotizacion, fecha_cierre=excluded.fecha_cierre, synced_at=now();",
+        "query": "INSERT INTO kommo_leads (lead_id, name, price, pipeline_id, status_id, responsible_user_id, responsible_user_name, created_at, updated_at, closed_at, is_won, is_lost, loss_reason_id, loss_reason_name, campaign, adset, ad, fecha_agenda, fecha_cita_asistida, fecha_cotizacion, fecha_por_cerrar, fecha_cierre, synced_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22, now()) ON CONFLICT (lead_id) DO UPDATE SET name=excluded.name, price=excluded.price, pipeline_id=excluded.pipeline_id, status_id=excluded.status_id, responsible_user_id=excluded.responsible_user_id, responsible_user_name=excluded.responsible_user_name, created_at=excluded.created_at, updated_at=excluded.updated_at, closed_at=excluded.closed_at, is_won=excluded.is_won, is_lost=excluded.is_lost, loss_reason_id=excluded.loss_reason_id, loss_reason_name=excluded.loss_reason_name, campaign=excluded.campaign, adset=excluded.adset, ad=excluded.ad, fecha_agenda=excluded.fecha_agenda, fecha_cita_asistida=excluded.fecha_cita_asistida, fecha_cotizacion=excluded.fecha_cotizacion, fecha_por_cerrar=excluded.fecha_por_cerrar, fecha_cierre=excluded.fecha_cierre, synced_at=now();",
         "options": {
-          "queryReplacement": "={{ [$json.lead_id, $json.name, $json.price, $json.pipeline_id, $json.status_id, $json.responsible_user_id, $json.responsible_user_name, $json.created_at, $json.updated_at, $json.closed_at, $json.is_won, $json.is_lost, $json.loss_reason_id, $json.loss_reason_name, $json.campaign, $json.adset, $json.ad, $json.fecha_agenda, $json.fecha_cita_asistida, $json.fecha_cotizacion, $json.fecha_cierre] }}"
+          "queryReplacement": "={{ [$json.lead_id, $json.name, $json.price, $json.pipeline_id, $json.status_id, $json.responsible_user_id, $json.responsible_user_name, $json.created_at, $json.updated_at, $json.closed_at, $json.is_won, $json.is_lost, $json.loss_reason_id, $json.loss_reason_name, $json.campaign, $json.adset, $json.ad, $json.fecha_agenda, $json.fecha_cita_asistida, $json.fecha_cotizacion, $json.fecha_por_cerrar, $json.fecha_cierre] }}"
         }
       },
       "credentials": { "postgres": { "id": "VfzvqXcIPcMEj12e", "name": "Postgres - panel (reportes-db)" } }
@@ -234,6 +288,16 @@
         { "node": "Fetch Leads Page", "type": "main", "index": 0 }
       ]]
     },
+    "Every 15 min (won/lost today)": {
+      "main": [[
+        { "node": "Get Users", "type": "main", "index": 0 },
+        { "node": "Get Loss Reasons", "type": "main", "index": 0 },
+        { "node": "Fetch Won/Lost Today", "type": "main", "index": 0 }
+      ]]
+    },
+    "Fetch Won/Lost Today": { "main": [[{ "node": "Classify won/lost today", "type": "main", "index": 0 }]] },
+    "Classify won/lost today": { "main": [[{ "node": "Drop non won/lost today", "type": "main", "index": 0 }]] },
+    "Drop non won/lost today": { "main": [[{ "node": "Upsert kommo_leads", "type": "main", "index": 0 }]] },
     "Get Pipelines": { "main": [[{ "node": "Flatten statuses", "type": "main", "index": 0 }]] },
     "Get Loss Reasons": { "main": [[{ "node": "Flatten loss reasons", "type": "main", "index": 0 }]] },
     "Fetch Leads Page": { "main": [[{ "node": "Wait 350ms", "type": "main", "index": 0 }]] },

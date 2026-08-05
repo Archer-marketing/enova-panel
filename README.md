@@ -2,7 +2,7 @@
 
 Panel de reporting sobre datos de Kommo CRM: dos vistas (`/asesores` y
 `/campanas`) sobre el mismo embudo (asignado → agenda → cita asistida →
-cotización → cierre/pérdida), filtrables por fecha y por asesor o
+cotización → por cerrar → cierre/pérdida), filtrables por fecha y por asesor o
 campaña/adset/ad. Ver el plan completo en
 `C:\Users\amega\.claude\plans\quiero-hacer-2-reportes-composed-wombat.md`
 para el contexto y las decisiones de diseño.
@@ -56,7 +56,8 @@ con el SQL que ya está en el JSON, que es la parte que importa.
    `kommo-won-lost-webhook.json`, aún inactivo, que puedes ver en n8n antes
    de activarlo), luego `npm run setup:kommo`. Esto:
    - crea los custom fields `fecha_agenda`, `fecha_cita_asistida`,
-     `fecha_cotizacion`, `fecha_cierre` en Kommo (si no existen),
+     `fecha_cotizacion`, `fecha_por_cerrar`, `fecha_cierre` en Kommo (si no
+     existen),
    - localiza los custom fields de campaña/adset/ad ya existentes,
    - sincroniza pipelines/statuses y razones de pérdida a Postgres,
    - registra el webhook en Kommo,
@@ -75,8 +76,9 @@ con el SQL que ya está en el JSON, que es la parte que importa.
 ## Arquitectura
 
 ```
-Kommo CRM ──(hourly poll, ~3 req/s)──▶ n8n "kommo-sync-full"      ──▶ Postgres
-Kommo CRM ──(webhook status change)──▶ n8n "kommo-won-lost-webhook" ──▶ Postgres
+Kommo CRM ──(hourly poll, ~3 req/s)────────▶ n8n "kommo-sync-full" (full sync)      ──▶ Postgres
+Kommo CRM ──(webhook status change)────────▶ n8n "kommo-won-lost-webhook"           ──▶ Postgres
+Kommo CRM ──(15 min poll, won/lost today)──▶ n8n "kommo-sync-full" (won/lost today) ──▶ Postgres
 Postgres ◀──(SQL vía pg)── Next.js dashboard (lectura)
 Next.js dashboard ──(botón "Actualizar", POST /api/sync)──▶ n8n "kommo-sync-full" (webhook manual)
 ```
@@ -84,9 +86,16 @@ Next.js dashboard ──(botón "Actualizar", POST /api/sync)──▶ n8n "komm
 - `kommo-sync-full` es la fuente de verdad: pagina todos los leads cada
   hora, respetando el límite de 3 req/s, y sobrescribe la fila completa de
   cada lead (`ON CONFLICT (lead_id) DO UPDATE`).
-- `kommo-won-lost-webhook` es una optimización de frescura: cuando Kommo
-  notifica un cambio de lead, refresca esa fila de inmediato si el lead
-  quedó ganado o perdido, sin esperar la corrida horaria.
+- `kommo-won-lost-webhook` es la optimización de frescura principal: cuando
+  Kommo notifica un cambio de lead, refresca esa fila de inmediato si el
+  lead quedó ganado o perdido, sin esperar la corrida horaria.
+- El mismo workflow `kommo-sync-full` también corre, cada 15 minutos, una
+  rama liviana ("Every 15 min (won/lost today)") que pide solo los leads
+  actualizados hoy (`filter[updated_at][from]`, un solo request sin
+  paginar) y descarta los que no estén ganados/perdidos. Es una red de
+  seguridad barata por si el webhook falla o Kommo no dispara el evento —
+  no reemplaza al webhook, cierra el hueco entre corridas horarias sin
+  sobrecargar el sistema.
 - El dashboard lee Postgres para armar los reportes. El botón
   **Actualizar** es la única acción que escribe fuera de Postgres: llama a
   `POST /api/sync`, que dispara el webhook manual
@@ -117,6 +126,7 @@ cuándo sucedió, no cuándo se generó el lead"):
 | Citas agendadas | `fecha_agenda` |
 | Citas asistidas | `fecha_cita_asistida` |
 | Cotizaciones | `fecha_cotizacion` |
+| Por cerrar | `fecha_por_cerrar` |
 
 "Ganados" y "Cierres" son la misma métrica (a pedido del usuario): ambas
 salen de `fecha_cierre`, el campo custom que se marca a mano al cerrar el
@@ -167,7 +177,7 @@ src/components/*               — FilterBar, tabla de métricas, gráficas, sta
 ## Verificación end-to-end (una vez con credenciales)
 
 1. `GET {KOMMO_BASE_URL}/api/v4/leads/custom_fields` y `/api/v4/webhooks`
-   para confirmar que el setup creó los 3 campos y el webhook.
+   para confirmar que el setup creó los 5 campos y el webhook.
 2. Correr `kommo-sync-full` manualmente en n8n y revisar
    `select count(*) from kommo_leads;` en Postgres.
 3. Cambiar un lead a ganado/perdido en Kommo y confirmar que

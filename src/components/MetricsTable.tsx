@@ -36,6 +36,8 @@ export function MetricsTable({
             <th>Promedio cotizado</th>
             <th>% cotiz/leads</th>
             <th>% participación cotiz</th>
+            <th>Por cerrar</th>
+            <th>% por cerrar/cotiz</th>
             <th>Cierres</th>
             <th>Valor cierre</th>
             <th>Promedio cierre</th>
@@ -72,6 +74,8 @@ export function MetricsTable({
               <td>{formatCurrency(r.promedioCotizado)}</td>
               <td>{formatPercent(r.pctCotizacionesSobreLeads)}</td>
               <td>{formatPercent(r.pctParticipacionCotizado)}</td>
+              <td>{formatNumber(r.porCerrar)}</td>
+              <td>{formatPercent(r.pctPorCerrarSobreCotizacion)}</td>
               <td>{formatNumber(r.cierres)}</td>
               <td>{formatCurrency(r.valorCierre)}</td>
               <td>{formatCurrency(r.promedioCierre)}</td>

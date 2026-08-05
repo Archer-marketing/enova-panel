@@ -74,6 +74,8 @@ function emptyRow(dimensionValue: string): FunnelRow {
     promedioCotizado: 0,
     pctCotizacionesSobreLeads: 0,
     pctParticipacionCotizado: 0,
+    porCerrar: 0,
+    pctPorCerrarSobreCotizacion: 0,
     cierres: 0,
     valorCierre: 0,
     promedioCierre: 0,
@@ -112,6 +114,7 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
       count(*) FILTER (WHERE fecha_cita_asistida >= $${fromIdx} AND fecha_cita_asistida < $${toIdx}::date + 1) AS citas_asistidas,
       count(*) FILTER (WHERE fecha_cotizacion >= $${fromIdx} AND fecha_cotizacion < $${toIdx}::date + 1) AS cotizaciones,
       coalesce(sum(price) FILTER (WHERE fecha_cotizacion >= $${fromIdx} AND fecha_cotizacion < $${toIdx}::date + 1), 0) AS valor_cotizado,
+      count(*) FILTER (WHERE fecha_por_cerrar >= $${fromIdx} AND fecha_por_cerrar < $${toIdx}::date + 1) AS por_cerrar,
       count(*) FILTER (WHERE fecha_cierre >= $${fromIdx} AND fecha_cierre < $${toIdx}::date + 1) AS cierres,
       coalesce(sum(price) FILTER (WHERE fecha_cierre >= $${fromIdx} AND fecha_cierre < $${toIdx}::date + 1), 0) AS valor_cierre
     FROM kommo_leads
@@ -159,6 +162,7 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
     row.citasAsistidas = Number(r.citas_asistidas);
     row.cotizaciones = Number(r.cotizaciones);
     row.valorCotizado = Number(r.valor_cotizado);
+    row.porCerrar = Number(r.por_cerrar);
     row.cierres = Number(r.cierres);
     row.valorCierre = Number(r.valor_cierre);
     // "Ganados" = "Cierres": ambos vienen de fecha_cierre, no del status
@@ -171,6 +175,7 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
     row.pctAsistenciaSobreAgenda = pct(row.citasAsistidas, row.citasAgendadas);
     row.pctCotizacionesSobreLeads = pct(row.cotizaciones, row.leadsAsignados);
     row.promedioCotizado = pct(row.valorCotizado, row.cotizaciones);
+    row.pctPorCerrarSobreCotizacion = pct(row.porCerrar, row.cotizaciones);
     row.promedioCierre = pct(row.valorCierre, row.cierres);
     row.pctCierreSobreCotizacion = pct(row.cierres, row.cotizaciones);
     row.pctCierreSobreAsistencia = pct(row.cierres, row.citasAsistidas);
@@ -214,6 +219,7 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
   totals.citasAsistidas = rows.reduce((s, r) => s + r.citasAsistidas, 0);
   totals.cotizaciones = rows.reduce((s, r) => s + r.cotizaciones, 0);
   totals.valorCotizado = totalValorCotizado;
+  totals.porCerrar = rows.reduce((s, r) => s + r.porCerrar, 0);
   totals.cierres = rows.reduce((s, r) => s + r.cierres, 0);
   totals.valorCierre = totalValorCierre;
   totals.pctActivosSobreLeads = pct(totals.leadsActivos, totals.leadsAsignados);
@@ -221,6 +227,7 @@ export async function getFunnelReport(filters: ReportFilters): Promise<FunnelRep
   totals.pctAsistenciaSobreAgenda = pct(totals.citasAsistidas, totals.citasAgendadas);
   totals.pctCotizacionesSobreLeads = pct(totals.cotizaciones, totals.leadsAsignados);
   totals.promedioCotizado = pct(totals.valorCotizado, totals.cotizaciones);
+  totals.pctPorCerrarSobreCotizacion = pct(totals.porCerrar, totals.cotizaciones);
   totals.promedioCierre = pct(totals.valorCierre, totals.cierres);
   totals.pctCierreSobreCotizacion = pct(totals.cierres, totals.cotizaciones);
   totals.pctCierreSobreAsistencia = pct(totals.cierres, totals.citasAsistidas);

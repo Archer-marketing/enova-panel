@@ -50,6 +50,9 @@ export type FunnelRow = {
   pctCotizacionesSobreLeads: number;
   pctParticipacionCotizado: number;
 
+  porCerrar: number;
+  pctPorCerrarSobreCotizacion: number;
+
   cierres: number;
   valorCierre: number;
   promedioCierre: number;

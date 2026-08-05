@@ -5,10 +5,10 @@
  * What it does:
  *   1. Lists existing Kommo lead custom fields, and tries to locate the
  *      campaign/adset/ad fields that already exist in the account.
- *   2. Creates the 4 custom fields this project needs and Kommo doesn't
+ *   2. Creates the 5 custom fields this project needs and Kommo doesn't
  *      have yet: fecha_agenda, fecha_cita_asistida, fecha_cotizacion,
- *      fecha_cierre (type date_time). Skips any that already exist
- *      (matched by name).
+ *      fecha_por_cerrar, fecha_cierre (type date_time). Skips any that
+ *      already exist (matched by name).
  *   3. Pulls pipelines/statuses and loss reasons, and writes them into
  *      kommo_statuses / kommo_loss_reasons in Postgres.
  *   4. Registers a webhook pointing at the n8n won/lost workflow, if one
@@ -179,6 +179,7 @@ async function main() {
   const agendaId = await findOrCreateDateTime("fecha_agenda", "fecha_agenda");
   const citaAsistidaId = await findOrCreateDateTime("fecha_cita_asistida", "fecha_cita_asistida");
   const cotizacionId = await findOrCreateDateTime("fecha_cotizacion", "fecha_cotizacion");
+  const porCerrarId = await findOrCreateDateTime("fecha_por_cerrar", "fecha_por_cerrar");
   const cierreId = await findOrCreateDateTime("fecha_cierre", "fecha_cierre");
 
   console.log("== Fetching pipelines/statuses ==");
@@ -224,6 +225,7 @@ async function main() {
       agenda: { id: agendaId, name: "fecha_agenda" },
       cita_asistida: { id: citaAsistidaId, name: "fecha_cita_asistida" },
       cotizacion: { id: cotizacionId, name: "fecha_cotizacion" },
+      por_cerrar: { id: porCerrarId, name: "fecha_por_cerrar" },
       cierre: { id: cierreId, name: "fecha_cierre" },
       campaign: campaignField ? { id: campaignField.id, name: campaignField.name } : null,
       adset: adsetField ? { id: adsetField.id, name: adsetField.name } : null,
